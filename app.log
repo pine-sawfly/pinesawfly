@@ -1,0 +1,27 @@
+2025-08-12 12:27:11,311 - plugins.php_plugin.rule_engine - INFO - 加载了 4 条默认规则
+2025-08-12 12:27:11,311 - plugins.php_plugin.php_plugin - INFO - PHP插件 php_plugin 初始化成功
+2025-08-12 12:27:11,313 - plugins.php_plugin.php_plugin - INFO - 开始扫描文件: test_vuln.php
+2025-08-12 12:27:11,313 - plugins.php_plugin.php_parser - INFO - 正在解析文件: test_vuln.php
+2025-08-12 12:27:11,314 - plugins.php_plugin.php_parser - INFO - 文件 test_vuln.php 解析完成
+2025-08-12 12:27:11,314 - plugins.php_plugin.rule_engine - INFO - 规则引擎在文件 test_vuln.php 中发现 1 个问题
+2025-08-12 12:27:11,315 - plugins.php_plugin.taint_analyzer - INFO - 污点分析在文件 test_vuln.php 中发现 1 个问题
+2025-08-12 12:27:11,315 - plugins.php_plugin.php_plugin - INFO - 文件 test_vuln.php 扫描完成，发现 2 个问题
+2025-08-12 12:27:11,778 - plugins.php_plugin.php_plugin - INFO - 清理插件 php_plugin 的资源
+2025-08-12 13:41:21,624 - plugins.php_plugin.rule_engine - INFO - 从 c:\Users\Pine\Desktop\Project\pinesawfly\plugins\php_plugin\rules\default_rules.json 加载了 5 条规则
+2025-08-12 13:41:21,624 - plugins.php_plugin.php_plugin - INFO - PHP插件 php_plugin 初始化成功
+2025-08-12 13:41:21,628 - plugins.php_plugin.php_plugin - INFO - 开始扫描文件: test_vuln.php
+2025-08-12 13:41:21,628 - plugins.php_plugin.php_parser - INFO - 正在解析文件: test_vuln.php
+2025-08-12 13:41:21,629 - plugins.php_plugin.php_parser - INFO - 文件 test_vuln.php 解析完成
+2025-08-12 13:41:21,629 - plugins.php_plugin.rule_engine - INFO - 规则引擎在文件 test_vuln.php 中发现 2 个问题
+2025-08-12 13:41:21,629 - plugins.php_plugin.taint_analyzer - INFO - 污点分析在文件 test_vuln.php 中发现 1 个问题
+2025-08-12 13:41:21,629 - plugins.php_plugin.php_plugin - INFO - 文件 test_vuln.php 扫描完成，发现 3 个问题
+2025-08-12 13:41:21,631 - plugins.php_plugin.php_plugin - INFO - 清理插件 php_plugin 的资源
+2025-08-12 18:30:26,812 - plugins.php_plugin.rule_engine - INFO - 从 c:\Users\Pine\Desktop\Project\pinesawfly\plugins\php_plugin\rules\default_rules.json 加载了 5 条规则
+2025-08-12 18:30:26,815 - plugins.php_plugin.php_plugin - INFO - PHP插件 php_plugin 初始化成功
+2025-08-12 18:30:26,816 - plugins.php_plugin.php_plugin - INFO - 开始扫描文件: test_vuln.php
+2025-08-12 18:30:26,816 - plugins.php_plugin.php_parser - INFO - 正在解析文件: test_vuln.php
+2025-08-12 18:30:26,818 - plugins.php_plugin.php_parser - INFO - 文件 test_vuln.php 解析完成
+2025-08-12 18:30:26,818 - plugins.php_plugin.rule_engine - INFO - 规则引擎在文件 test_vuln.php 中发现 2 个问题
+2025-08-12 18:30:26,818 - plugins.php_plugin.taint_analyzer - INFO - 污点分析在文件 test_vuln.php 中发现 1 个问题
+2025-08-12 18:30:26,818 - plugins.php_plugin.php_plugin - INFO - 文件 test_vuln.php 扫描完成，发现 3 个问题
+2025-08-12 18:30:26,820 - plugins.php_plugin.php_plugin - INFO - 清理插件 php_plugin 的资源

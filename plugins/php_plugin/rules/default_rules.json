@@ -1,0 +1,44 @@
+{
+  "rules": [
+    {
+      "id": "PHP001",
+      "name": "危险函数调用",
+      "type": "AST",
+      "pattern": "FunctionCall[name='eval']",
+      "severity": "Critical",
+      "description": "检测到eval函数调用，可能导致代码注入"
+    },
+    {
+      "id": "PHP002",
+      "name": "文件包含漏洞",
+      "type": "AST",
+      "pattern": "FunctionCall[name='include']",
+      "severity": "High",
+      "description": "检测到include函数调用，可能存在文件包含漏洞"
+    },
+    {
+      "id": "PHP003",
+      "name": "命令执行函数",
+      "type": "AST",
+      "pattern": "FunctionCall[name='exec']",
+      "severity": "High",
+      "description": "检测到exec函数调用，可能导致命令执行"
+    },
+    {
+      "id": "PHP004",
+      "name": "系统命令函数",
+      "type": "AST",
+      "pattern": "FunctionCall[name='system']",
+      "severity": "High",
+      "description": "检测到system函数调用，可能导致命令执行"
+    },
+    {
+      "id": "PHP005",
+      "name": "反序列化漏洞",
+      "type": "AST",
+      "pattern": "FunctionCall[name='unserialize']",
+      "severity": "High",
+      "description": "检测到unserialize函数调用，可能存在反序列化漏洞"
+    }
+  ]
+}
