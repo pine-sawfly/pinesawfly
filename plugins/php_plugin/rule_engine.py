@@ -83,6 +83,14 @@ class RuleEngine:
                 "pattern": "FunctionCall[name='unserialize']",
                 "severity": "High",
                 "description": "检测到unserialize函数调用，可能存在反序列化漏洞"
+            },
+            {
+                "id": "PHP006",
+                "name": "任意文件读取风险",
+                "type": "AST",
+                "pattern": "FunctionCall[name='file_get_contents|fopen|readfile|fgets|fread|parse_ini_file|highlight_file|fgetss|show_source']",
+                "severity": "High",
+                "description": "检测到文件读取函数调用，参数包含变量，可能存在任意文件读取漏洞"
             }
         ]
         return default_rules

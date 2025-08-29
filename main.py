@@ -61,12 +61,16 @@ class MainWindow(QMainWindow):
         # 创建顶部按钮区域
         self.create_top_buttons(right_layout)
         
+        # 创建分割器
+        self.editor_splitter = QSplitter(Qt.Vertical)
+        
         # 创建多标签代码编辑器区域
-        self.create_code_editor(right_layout)
+        self.create_code_editor(self.editor_splitter)
         
         # 创建漏洞结果表
-        self.create_vulnerability_table(right_layout)
+        self.create_vulnerability_table(self.editor_splitter)
         
+        right_layout.addWidget(self.editor_splitter)
         splitter.addWidget(right_widget)
         splitter.setSizes([300, 900])  # 设置初始大小
         
@@ -269,8 +273,8 @@ class MainWindow(QMainWindow):
                             # 将漏洞添加到表格中
                             for vuln in vulns:
                                 row = [
-                                    QStandardItem(vuln.get("id", "未知")),
-                                    QStandardItem(vuln.get("name", "未知")),
+                                    QStandardItem(vuln.get("rule_id", "未知")),
+                                    QStandardItem(vuln.get("rule_name", "未知")),
                                     QStandardItem(vuln.get("severity", "未知")),
                                     QStandardItem(str(php_file.relative_to(project_path))),
                                     QStandardItem(str(vuln.get("line", "未知"))),
@@ -330,13 +334,19 @@ class MainWindow(QMainWindow):
                     # 根据文件扩展名设置语法高亮
                     EditorModule.set_editor_lexer(self.editor, file_path)
                     self.editor.setText(content)
+                    if hasattr(self.editor, 'highlighter') and self.editor.highlighter:
+                        self.editor.highlighter.rehighlight()
                 else:  # QTextEdit
                     self.editor.setPlainText(content)
+                    # 根据文件扩展名设置语法高亮
+                    EditorModule.set_editor_lexer(self.editor, file_path)
+                    if hasattr(self.editor, 'highlighter') and self.editor.highlighter:
+                        self.editor.highlighter.rehighlight()
                     
                 self.status_bar.showMessage(f"已加载文件: {file_path}")
             except Exception as e:
                 self.status_bar.showMessage(f"无法读取文件: {str(e)}")
-                logger.error(f"读取文件失败 {file_path}: {str(e)}")  
+                logger.error(f"读取文件失败 {file_path}: {str(e)}")
     def on_vuln_clicked(self, index):
         """
         漏洞表点击事件
