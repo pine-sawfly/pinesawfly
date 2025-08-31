@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "id": "JAVA001",
+      "name": "命令执行(Runtime.getRuntime)",
+      "type": "REGEX",
+      "pattern": "Runtime\\.getRuntime\\(\\)\\.exec\\(",
+      "severity": "High",
+      "description": "检测到Runtime.getRuntime().exec()调用，可能导致命令执行"
+    },
+    {
+      "id": "JAVA002",
+      "name": "SQL注入风险",
+      "type": "REGEX",
+      "pattern": "createStatement\\(\\)\\.execute\\(",
+      "severity": "High",
+      "description": "检测到直接执行SQL语句，可能存在SQL注入风险"
+    },
+    {
+      "id": "JAVA003",
+      "name": "反序列化漏洞",
+      "type": "REGEX",
+      "pattern": "readObject\\s*\\(",
+      "severity": "High",
+      "description": "检测到readObject方法调用，可能存在反序列化漏洞"
+    }
+  ]
+}

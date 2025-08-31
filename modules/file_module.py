@@ -1,4 +1,5 @@
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -44,3 +45,16 @@ class FileModule:
         except Exception as e:
             logger.error(f"强制解码文件 {file_path} 时出错: {str(e)}")
             raise Exception(f"无法读取文件 {file_path}，所有编码尝试均失败")
+
+    @staticmethod
+    def get_file_extension(file_path):
+        """
+        获取文件扩展名
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            str: 文件扩展名（包括点号），如果无扩展名则返回空字符串
+        """
+        return os.path.splitext(file_path)[1].lower()

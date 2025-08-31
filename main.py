@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         self.create_menu_bar()
         
         # 创建工具栏
-        self.create_toolbar()
+        # self.create_toolbar()
         
         # 创建中央部件
         central_widget = QWidget()
@@ -98,31 +98,64 @@ class MainWindow(QMainWindow):
         
         file_menu.addSeparator()
         
+        # 扫描菜单
+        scan_menu = file_menu.addMenu('扫描')
+        
+        scan_action = QAction('扫描项目', self)
+        scan_action.setShortcut('Ctrl+Shift+S')
+        scan_action.triggered.connect(self.start_scan)
+        scan_menu.addAction(scan_action)
+        
+        deep_scan_action = QAction('深度扫描项目', self)
+        deep_scan_action.setShortcut('Ctrl+Shift+D')
+        deep_scan_action.triggered.connect(self.start_deep_scan)
+        scan_menu.addAction(deep_scan_action)
+        
+        file_menu.addSeparator()
+        
+        # 工具菜单
+        tools_menu = menubar.addMenu('工具')
+        
+        plugin_action = QAction('插件管理', self)
+        plugin_action.triggered.connect(self.manage_plugins)
+        tools_menu.addAction(plugin_action)
+        
+        rule_action = QAction('自定义规则', self)
+        rule_action.triggered.connect(self.customize_rules)
+        tools_menu.addAction(rule_action)
+        
+        file_menu.addSeparator()
+        
         exit_action = QAction('退出', self)
         exit_action.setShortcut('Ctrl+Q')
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-    def create_toolbar(self):
-        """
-        创建工具栏
-        """
-        toolbar = self.addToolBar('工具栏')
+    # def create_toolbar(self):
+    #     """
+    #     创建工具栏
+    #     """
+    #     toolbar = self.addToolBar('工具栏')
         
-        # 扫描按钮
-        self.scan_button = QPushButton("扫描")
-        self.scan_button.clicked.connect(self.start_scan)
-        toolbar.addWidget(self.scan_button)
+    #     # 扫描按钮
+    #     self.scan_button = QPushButton("扫描")
+    #     self.scan_button.clicked.connect(self.start_scan)
+    #     toolbar.addWidget(self.scan_button)
         
-        # 添加插件按钮
-        plugin_action = QAction('插件管理', self)
-        plugin_action.triggered.connect(self.manage_plugins)
-        toolbar.addAction(plugin_action)
+    #     # 深度扫描按钮
+    #     self.deep_scan_button = QPushButton("深度扫描")
+    #     self.deep_scan_button.clicked.connect(self.start_deep_scan)
+    #     toolbar.addWidget(self.deep_scan_button)
         
-        # 自定义规则按钮
-        rule_action = QAction('自定义规则', self)
-        rule_action.triggered.connect(self.customize_rules)
-        toolbar.addAction(rule_action)
+    #     # 添加插件按钮
+    #     plugin_action = QAction('插件管理', self)
+    #     plugin_action.triggered.connect(self.manage_plugins)
+    #     toolbar.addAction(plugin_action)
+        
+    #     # 自定义规则按钮
+    #     rule_action = QAction('自定义规则', self)
+    #     rule_action.triggered.connect(self.customize_rules)
+    #     toolbar.addAction(rule_action)
         
     def create_top_buttons(self, parent_layout):
         """
@@ -130,10 +163,15 @@ class MainWindow(QMainWindow):
         """
         button_layout = QHBoxLayout()
         
-        # 添加一些示例按钮
+        # 添加扫描按钮
         self.scan_btn = QPushButton("扫描项目")
         self.scan_btn.clicked.connect(self.start_scan)
         button_layout.addWidget(self.scan_btn)
+        
+        # 添加深度扫描按钮
+        self.deep_scan_btn = QPushButton("深度扫描项目")
+        self.deep_scan_btn.clicked.connect(self.start_deep_scan)
+        button_layout.addWidget(self.deep_scan_btn)
         
         self.report_btn = QPushButton("生成报告")
         self.report_btn.clicked.connect(self.generate_report)
@@ -236,20 +274,109 @@ class MainWindow(QMainWindow):
         
     def start_scan(self):
         """
-        开始扫描
+        开始扫描（仅通用规则扫描）
         """
         self.status_bar.showMessage("开始扫描...")
         self.scan_button.setEnabled(False)
         self.scan_button.setText("扫描中...")
+        self.deep_scan_button.setEnabled(False)
         
         # 清空现有的漏洞数据
         self.table_model.removeRows(0, self.table_model.rowCount())
         
-        # 导入插件系统
+        try:
+            from pathlib import Path
+            from modules.generic_rule_engine import GenericRuleEngine
+            
+            # 初始化通用规则引擎
+            rule_engine = GenericRuleEngine()
+            
+            # 遍历项目中的所有文件进行扫描
+            project_path = Path(self.project_path)
+            total_vulns = 0
+            
+            # 支持的文件类型
+            supported_extensions = {'.php', '.py', '.java'}
+            
+            for file_path in project_path.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
+                    try:
+                        # 执行扫描
+                        vulns = rule_engine.scan_file(str(file_path))
+                        # 将漏洞添加到表格中
+                        for vuln in vulns:
+                            row = [
+                                QStandardItem(vuln.get("rule_id", "未知")),
+                                QStandardItem(vuln.get("rule_name", "未知")),
+                                QStandardItem(vuln.get("severity", "未知")),
+                                QStandardItem(str(file_path.relative_to(project_path))),
+                                QStandardItem(str(vuln.get("line", "未知"))),
+                                QStandardItem(vuln.get("description", ""))
+                            ]
+                            self.table_model.appendRow(row)
+                            total_vulns += 1
+                    except Exception as e:
+                        logger.error(f"扫描文件 {file_path} 时出错: {str(e)}")
+            
+            self.status_bar.showMessage(f"扫描完成，发现 {total_vulns} 个漏洞")
+            
+        except Exception as e:
+            logger.error(f"扫描过程中出错: {str(e)}")
+            self.status_bar.showMessage("扫描出错，请查看日志")
+        
+        self.scan_button.setEnabled(True)
+        self.deep_scan_button.setEnabled(True)
+        self.scan_button.setText("扫描")
+        logger.info("扫描完成")
+    
+    def start_deep_scan(self):
+        """
+        开始深度扫描（通用规则扫描 + 插件扫描）
+        """
+        self.status_bar.showMessage("开始深度扫描...")
+        self.deep_scan_button.setEnabled(False)
+        self.deep_scan_button.setText("深度扫描中...")
+        self.scan_button.setEnabled(False)
+        
+        # 清空现有的漏洞数据
+        self.table_model.removeRows(0, self.table_model.rowCount())
+        
         try:
             from core.plugin_loader import PluginLoader
             from pathlib import Path
+            from modules.generic_rule_engine import GenericRuleEngine
             
+            # 1. 首先进行通用规则扫描
+            rule_engine = GenericRuleEngine()
+            
+            # 遍历项目中的所有文件进行扫描
+            project_path = Path(self.project_path)
+            total_vulns = 0
+            
+            # 支持的文件类型
+            supported_extensions = {'.php', '.py', '.java'}
+            
+            for file_path in project_path.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
+                    try:
+                        # 执行通用规则扫描
+                        vulns = rule_engine.scan_file(str(file_path))
+                        # 将漏洞添加到表格中
+                        for vuln in vulns:
+                            row = [
+                                QStandardItem(vuln.get("rule_id", "未知")),
+                                QStandardItem(vuln.get("rule_name", "未知")),
+                                QStandardItem(vuln.get("severity", "未知")),
+                                QStandardItem(str(file_path.relative_to(project_path))),
+                                QStandardItem(str(vuln.get("line", "未知"))),
+                                QStandardItem(vuln.get("description", ""))
+                            ]
+                            self.table_model.appendRow(row)
+                            total_vulns += 1
+                    except Exception as e:
+                        logger.error(f"通用规则扫描文件 {file_path} 时出错: {str(e)}")
+            
+            # 2. 然后进行插件扫描
             # 加载插件
             plugin_loader = PluginLoader()
             plugins = plugin_loader.load_all_plugins()
@@ -262,13 +389,11 @@ class MainWindow(QMainWindow):
                 
                 if initialized:
                     # 遍历项目中的PHP文件进行扫描
-                    project_path = Path(self.project_path)
                     php_files = list(project_path.rglob("*.php"))
                     
-                    total_vulns = 0
                     for php_file in php_files:
                         try:
-                            # 执行扫描
+                            # 执行插件扫描
                             vulns = php_plugin.scan(str(php_file))
                             # 将漏洞添加到表格中
                             for vuln in vulns:
@@ -283,21 +408,23 @@ class MainWindow(QMainWindow):
                                 self.table_model.appendRow(row)
                                 total_vulns += 1
                         except Exception as e:
-                            logger.error(f"扫描文件 {php_file} 时出错: {str(e)}")
-                    
-                    self.status_bar.showMessage(f"扫描完成，发现 {total_vulns} 个漏洞")
+                            logger.error(f"插件扫描文件 {php_file} 时出错: {str(e)}")
+                
                 else:
                     self.status_bar.showMessage("PHP插件初始化失败")
             else:
                 self.status_bar.showMessage("未找到PHP插件")
+            
+            self.status_bar.showMessage(f"深度扫描完成，发现 {total_vulns} 个漏洞")
                 
         except Exception as e:
-            logger.error(f"扫描过程中出错: {str(e)}")
-            self.status_bar.showMessage("扫描出错，请查看日志")
+            logger.error(f"深度扫描过程中出错: {str(e)}")
+            self.status_bar.showMessage("深度扫描出错，请查看日志")
         
+        self.deep_scan_button.setEnabled(True)
         self.scan_button.setEnabled(True)
-        self.scan_button.setText("扫描")
-        logger.info("扫描完成")
+        self.deep_scan_button.setText("深度扫描")
+        logger.info("深度扫描完成")
     
     def manage_plugins(self):
         """

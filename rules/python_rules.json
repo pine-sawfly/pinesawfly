@@ -1,0 +1,36 @@
+{
+  "rules": [
+    {
+      "id": "PY001",
+      "name": "危险函数调用(exec)",
+      "type": "REGEX",
+      "pattern": "\\bexec\\s*\\(",
+      "severity": "High",
+      "description": "检测到exec函数调用，可能导致代码执行"
+    },
+    {
+      "id": "PY002",
+      "name": "危险函数调用(eval)",
+      "type": "REGEX",
+      "pattern": "\\beval\\s*\\(",
+      "severity": "Critical",
+      "description": "检测到eval函数调用，可能导致代码注入"
+    },
+    {
+      "id": "PY003",
+      "name": "操作系统命令执行",
+      "type": "REGEX",
+      "pattern": "\\bos\\.system\\s*\\(",
+      "severity": "High",
+      "description": "检测到os.system函数调用，可能导致命令执行"
+    },
+    {
+      "id": "PY004",
+      "name": "子进程执行",
+      "type": "REGEX",
+      "pattern": "\\bsubprocess\\.call\\s*\\(",
+      "severity": "High",
+      "description": "检测到subprocess.call函数调用，可能导致命令执行"
+    }
+  ]
+}
