@@ -39,6 +39,14 @@
       "pattern": "\\bunserialize\\s*\\(",
       "severity": "High",
       "description": "检测到unserialize函数调用，可能存在反序列化漏洞"
+    },
+    {
+      "id": "PHP006",
+      "name": "文件包含漏洞(require)",
+      "type": "REGEX",
+      "pattern": "\\brequire(_once){0,1}\\s*\\(",
+      "severity": "High",
+      "description": "检测到require函数调用，可能存在文件包含漏洞"
     }
   ]
 }

@@ -277,9 +277,9 @@ class MainWindow(QMainWindow):
         开始扫描（仅通用规则扫描）
         """
         self.status_bar.showMessage("开始扫描...")
-        self.scan_button.setEnabled(False)
-        self.scan_button.setText("扫描中...")
-        self.deep_scan_button.setEnabled(False)
+        self.scan_btn.setEnabled(False)
+        self.scan_btn.setText("扫描中...")
+        self.deep_scan_btn.setEnabled(False)
         
         # 清空现有的漏洞数据
         self.table_model.removeRows(0, self.table_model.rowCount())
@@ -324,9 +324,9 @@ class MainWindow(QMainWindow):
             logger.error(f"扫描过程中出错: {str(e)}")
             self.status_bar.showMessage("扫描出错，请查看日志")
         
-        self.scan_button.setEnabled(True)
-        self.deep_scan_button.setEnabled(True)
-        self.scan_button.setText("扫描")
+        self.scan_btn.setEnabled(True)
+        self.deep_scan_btn.setEnabled(True)
+        self.scan_btn.setText("扫描项目")
         logger.info("扫描完成")
     
     def start_deep_scan(self):
@@ -334,9 +334,9 @@ class MainWindow(QMainWindow):
         开始深度扫描（通用规则扫描 + 插件扫描）
         """
         self.status_bar.showMessage("开始深度扫描...")
-        self.deep_scan_button.setEnabled(False)
-        self.deep_scan_button.setText("深度扫描中...")
-        self.scan_button.setEnabled(False)
+        self.deep_scan_btn.setEnabled(False)
+        self.deep_scan_btn.setText("深度扫描中...")
+        self.scan_btn.setEnabled(False)
         
         # 清空现有的漏洞数据
         self.table_model.removeRows(0, self.table_model.rowCount())
@@ -421,9 +421,9 @@ class MainWindow(QMainWindow):
             logger.error(f"深度扫描过程中出错: {str(e)}")
             self.status_bar.showMessage("深度扫描出错，请查看日志")
         
-        self.deep_scan_button.setEnabled(True)
-        self.scan_button.setEnabled(True)
-        self.deep_scan_button.setText("深度扫描")
+        self.deep_scan_btn.setEnabled(True)
+        self.scan_btn.setEnabled(True)
+        self.deep_scan_btn.setText("深度扫描项目")
         logger.info("深度扫描完成")
     
     def manage_plugins(self):
