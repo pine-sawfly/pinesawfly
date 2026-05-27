@@ -2,19 +2,19 @@
   "rules": [
     {
       "id": "PHP001",
-      "name": "危险函数调用(eval)",
+      "name": "危险函数调用(eval/assert)",
       "type": "REGEX",
-      "pattern": "\\beval\\s*\\(",
+       "pattern": "\\b(eval|assert)\\s{0,10}\\(\\s{0,10}\\$\\w{1,20}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}",
       "severity": "Critical",
-      "description": "检测到eval函数调用，可能导致代码注入"
+      "description": "检测到eval或assert函数调用，可能导致代码注入"
     },
     {
       "id": "PHP002",
-      "name": "文件包含漏洞(include)",
+      "name": "文件包含漏洞(include/require)",
       "type": "REGEX",
-      "pattern": "\\binclude\\s*\\(",
+      "pattern": "\\b(include|require)(_once){0,1}(\\s{1,5}|\\s{0,5}\\().{0,60}\\$(?!.*(this->))\\w{1,20}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}",
       "severity": "High",
-      "description": "检测到include函数调用，可能存在文件包含漏洞"
+      "description": "检测到include/require函数调用，可能存在文件包含漏洞"
     },
     {
       "id": "PHP003",
@@ -42,11 +42,43 @@
     },
     {
       "id": "PHP006",
-      "name": "文件包含漏洞(require)",
+      "name": "SQL注入漏洞",
       "type": "REGEX",
-      "pattern": "\\brequire(_once){0,1}\\s*\\(",
+      "pattern": "(select|delete|update|insert)\\s+.*?(from|where|set)\\s+.*?=\\s*\\$\\w{1,20}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}",
       "severity": "High",
-      "description": "检测到require函数调用，可能存在文件包含漏洞"
+      "description": "SQL语句select中条件变量无单引号保护，可能存在SQL注入漏洞"
+    },
+    {
+      "id": "PHP007",
+      "name": "php版本信息泄露phpinfo()",
+      "type": "REGEX",
+      "pattern": "\\bphpinfo\\s{0,5}\\(\\s{0,5}\\)",
+      "severity": "Low",
+      "description": "检测到phpinfo()，可能存在php版本信息泄露"
+    },
+    {
+      "id": "PHP008",
+      "name": "动态函数调用风险",
+      "type": "REGEX",
+      "pattern": "\\bcall_user_func(_array){0,1}\\(\\s{0,5}\\$\\w{1,15}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}",
+      "severity": "High",
+      "description": "检测到call_user_func函数使用变量作为函数名，可能存在代码执行风险"
+    },
+    {
+      "id": "PHP009",
+      "name": "变量覆盖漏洞",
+      "type": "REGEX",
+      "pattern": "\\$\\${0,1}\\$\\w{1,20}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}\\s{0,4}=\\s{0,4}.{0,20}\\$\\w{1,20}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}",
+      "severity": "High",
+      "description": "检测到变量覆盖漏洞，用户输入可能覆盖关键变量"
+    },
+    {
+      "id": "PHP010",
+      "name": "文件上传漏洞",
+      "type": "REGEX",
+      "pattern": "\\bmove_uploaded_file\\s{0,5}\\(",
+      "severity": "High",
+      "description": "检测到move_uploaded_file函数调用，可能存在文件上传漏洞"
     }
   ]
 }
