@@ -11,7 +11,18 @@ Window {
     title: "PineSawFly"
     color: Styles.Theme.color.background
 
-    Component.onCompleted: Styles.Theme.manager = styleManager
+    Component.onCompleted: {
+        Styles.Theme.manager = styleManager
+        Styles.Fonts.manager = styleManager
+    }
+
+    Connections {
+        target: styleManager
+        function onThemeChanged() {
+            Styles.Theme.revision += 1
+            Styles.Fonts.revision += 1
+        }
+    }
 
     AppRoot {
         anchors.fill: parent

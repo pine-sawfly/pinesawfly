@@ -8,7 +8,35 @@ PageFrame {
 
     MD.Card {
         width: parent.width
-        height: 220
+        height: 280
+
+        Row {
+            spacing: 18
+
+            Image {
+                width: 72
+                height: 72
+                source: "../../../app.ico"
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+            }
+
+            Column {
+                spacing: 4
+                Text {
+                    text: "PineSawFly"
+                    font.pixelSize: 26
+                    font.weight: Font.DemiBold
+                    color: Styles.Theme.color.onSurface
+                }
+
+                Text {
+                    text: "PHP 安全审计桌面应用"
+                    font.pixelSize: 14
+                    color: Styles.Theme.color.onSurfaceVariant
+                }
+            }
+        }
 
         Text {
             text: "架构"

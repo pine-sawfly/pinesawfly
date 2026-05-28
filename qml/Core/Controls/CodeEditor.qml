@@ -9,6 +9,11 @@ Rectangle {
     property string highlightedText: ""
     property string filePath: ""
     property int targetLine: 0
+    property string editorFontFamily: Styles.Fonts.monoFamily
+
+    onEditorFontFamilyChanged: {
+        codeText.font.family = editorFontFamily
+    }
 
     color: Styles.Theme.manager && Styles.Theme.manager.isDarkTheme ? "#111318" : "#FAF9FD"
     radius: Styles.Theme.shape.small
@@ -58,7 +63,7 @@ Rectangle {
                             height: 20
                             text: index + 1
                             horizontalAlignment: Text.AlignRight
-                            font.family: Styles.Fonts.monoFamily
+                            font.family: root.editorFontFamily
                             font.pixelSize: 13
                             color: Styles.Theme.color.onSurfaceVariant
                         }
@@ -69,7 +74,7 @@ Rectangle {
                     id: codeText
                     text: root.highlightedText.length ? root.highlightedText : root.text
                     textFormat: root.highlightedText.length ? Text.RichText : Text.PlainText
-                    font.family: Styles.Fonts.monoFamily
+                    font.family: root.editorFontFamily
                     font.pixelSize: 13
                     lineHeightMode: Text.FixedHeight
                     lineHeight: 20

@@ -6,6 +6,7 @@ QtObject {
     id: theme
 
     property var manager: null
+    property int revision: 0
     property var color: manager ? manager.currentScheme : fallbackScheme
     property var fallbackScheme: ({
         primary: "#6750A4",
@@ -33,7 +34,7 @@ QtObject {
         title: 20,
         body: 14,
         label: 12,
-        family: "Segoe UI"
+        family: manager ? manager.uiFontFamily : "Segoe UI"
     })
 
     property var shape: ({
@@ -58,4 +59,6 @@ QtObject {
         disabledContent: 0.38,
         disabledContainer: 0.12
     })
+
+    onRevisionChanged: color = manager ? manager.currentScheme : fallbackScheme
 }

@@ -7,17 +7,17 @@ import "../Core/Controls" as MD
 Rectangle {
     id: root
 
-    color: Styles.Theme.color.background
+    color: Styles.Theme.color.surface
 
     property int currentIndex: 0
     property var bridge: auditBridge
     property var pages: [
-        { label: "Home", icon: "home", source: "pages/HomePage.qml" },
-        { label: "Components", icon: "widgets", source: "pages/ComponentsPage.qml" },
-        { label: "Color", icon: "palette", source: "pages/ColorPage.qml" },
-        { label: "Typography", icon: "text_fields", source: "pages/TypographyPage.qml" },
-        { label: "Settings", icon: "settings", source: "pages/SettingsPage.qml" },
-        { label: "About", icon: "info", source: "pages/AboutPage.qml" }
+        { label: "首页", icon: "home", source: "pages/HomePage.qml" },
+        { label: "组件", icon: "widgets", source: "pages/ComponentsPage.qml" },
+        { label: "颜色", icon: "palette", source: "pages/ColorPage.qml" },
+        { label: "字体", icon: "text_fields", source: "pages/TypographyPage.qml" },
+        { label: "设置", icon: "settings", source: "pages/SettingsPage.qml" },
+        { label: "关于", icon: "info", source: "pages/AboutPage.qml" }
     ]
 
     FolderDialog {
@@ -84,7 +84,7 @@ Rectangle {
                     width: parent.width
                     text: "打开项目"
                     icon: "folder_open"
-                    type: "tonal"
+                    type: "filled"
                     onClicked: folderDialog.open()
                 }
 
@@ -162,7 +162,7 @@ Rectangle {
         Rectangle {
             width: parent.width - drawer.width
             height: parent.height
-            color: Styles.Theme.color.background
+            color: Styles.Theme.color.surface
 
             Loader {
                 id: pageLoader
@@ -185,4 +185,5 @@ Rectangle {
             }
         }
     }
+
 }

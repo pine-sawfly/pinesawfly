@@ -6,11 +6,12 @@ PageFrame {
     title: "Settings"
     subtitle: "主题状态由 Python StyleManager 暴露给 QML。"
 
-    property var seeds: ["#6750A4", "#006A60", "#8C1D18", "#00639B"]
+    property var seeds: ["#006A60", "#6750A4", "#8C1D18", "#00639B"]
+    property var availableFonts: Qt.fontFamilies().sort()
 
     MD.Card {
         width: 520
-        height: 260
+        height: 430
 
         Row {
             spacing: 14
@@ -51,6 +52,34 @@ PageFrame {
                     }
                 }
             }
+        }
+
+        Text {
+            text: "界面字体"
+            font.pixelSize: 16
+            color: Styles.Theme.color.onSurface
+        }
+
+        MD.ComboBox {
+            width: 360
+            model: availableFonts
+            currentText: styleManager.uiFontFamily
+            placeholderText: "例如 Microsoft YaHei UI"
+            onActivated: styleManager.setUiFontFamily(text)
+        }
+
+        Text {
+            text: "编辑器字体"
+            font.pixelSize: 16
+            color: Styles.Theme.color.onSurface
+        }
+
+        MD.ComboBox {
+            width: 360
+            model: availableFonts
+            currentText: styleManager.editorFontFamily
+            placeholderText: "例如 JetBrains Mono"
+            onActivated: styleManager.setEditorFontFamily(text)
         }
     }
 }

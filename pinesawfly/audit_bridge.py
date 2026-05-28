@@ -254,63 +254,117 @@ class AuditBridge(QObject):
 
     def _highlight_code(self, content: str, file_path: str) -> str:
         extension = Path(file_path).suffix.lower()
-        escaped = html.escape(content)
-        escaped = escaped.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")
-
         rules = self._highlight_rules(extension)
-        for pattern, color, flags in rules:
-            escaped = re.sub(
-                pattern,
-                lambda match: f'<span style="color:{color};">{match.group(0)}</span>',
-                escaped,
-                flags=flags,
-            )
+        if not rules:
+            return self._html_preserve(content)
 
-        return (
-            "<pre style=\"margin:0; font-family:'Cascadia Mono','Consolas',monospace; "
-            "font-size:13px; line-height:20px; white-space:pre;\">"
-            f"{escaped}</pre>"
-        )
+        pieces: list[str] = []
+        position = 0
+        for match in rules.finditer(content):
+            if match.start() > position:
+                pieces.append(self._html_preserve(content[position:match.start()]))
+            color = self._match_color(match, extension)
+            pieces.append(f'<span style="color:{color};">{self._html_preserve(match.group(0))}</span>')
+            position = match.end()
+        if position < len(content):
+            pieces.append(self._html_preserve(content[position:]))
+        return "".join(pieces)
 
-    def _highlight_rules(self, extension: str) -> list[tuple[str, str, int]]:
-        common = [
-            (r"(&quot;.*?&quot;|&#x27;.*?&#x27;)", "#B87514", 0),
-            (r"\b([0-9]+)\b", "#6B8E23", 0),
-        ]
+    def _html_preserve(self, value: str) -> str:
+        return html.escape(value).replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("\n", "<br>")
+
+    def _highlight_rules(self, extension: str) -> re.Pattern[str] | None:
+        string = r"(?P<string>`(?:\\.|[^`])*`|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"
+        number = r"(?P<number>\b(?:0x[0-9A-Fa-f]+|\d+(?:\.\d+)?)\b)"
         if extension == ".php":
             keywords = (
-                "abstract|array|as|break|case|catch|class|const|continue|declare|default|"
-                "do|echo|else|elseif|extends|final|finally|foreach|function|global|if|"
-                "include|include_once|interface|namespace|new|private|protected|public|"
-                "require|require_once|return|static|switch|throw|trait|try|use|while"
+                "abstract|and|array|as|break|callable|case|catch|class|clone|const|continue|declare|"
+                "default|die|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|"
+                "endwhile|eval|exit|extends|final|finally|fn|for|foreach|function|global|goto|if|"
+                "implements|include|include_once|instanceof|insteadof|interface|isset|list|match|"
+                "namespace|new|or|print|private|protected|public|readonly|require|require_once|return|"
+                "static|switch|throw|trait|try|unset|use|var|while|xor|yield"
             )
-            return [
-                (r"(&lt;\?php|\?&gt;)", "#0B6E99", 0),
-                (rf"\b({keywords})\b", "#275EFE", 0),
-                (r"(\$_[A-Z_]+|\$[A-Za-z_][A-Za-z0-9_]*)", "#9A6700", 0),
-                (r"(//.*?$|#.*?$)", "#3F7D20", re.MULTILINE),
-                *common,
-            ]
+            dangerous = (
+                "eval|assert|system|exec|shell_exec|passthru|popen|proc_open|unserialize|"
+                "mysql_query|mysqli_query|query|file_get_contents|file_put_contents|fopen|"
+                "include|require|curl_exec|header|preg_replace|create_function|call_user_func"
+            )
+            return re.compile(
+                rf"(?P<comment>//[^\n]*|#[^\n]*|/\*[\s\S]*?\*/)|{string}|"
+                rf"(?P<tag><\?php|\?>)|(?P<superglobal>\$_(?:GET|POST|COOKIE|REQUEST|FILES|SERVER|SESSION|ENV)\b)|"
+                rf"(?P<variable>\$[A-Za-z_][A-Za-z0-9_]*)|(?P<danger>\b(?:{dangerous})\b)|"
+                rf"(?P<keyword>\b(?:{keywords})\b)|{number}",
+                re.IGNORECASE,
+            )
         if extension in {".py"}:
             keywords = (
-                "and|as|assert|break|class|continue|def|del|elif|else|except|finally|"
-                "for|from|global|if|import|in|is|lambda|not|or|pass|raise|return|"
-                "try|while|with|yield|True|False|None"
+                "False|None|True|and|as|assert|async|await|break|case|class|continue|def|del|elif|"
+                "else|except|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|"
+                "pass|raise|return|try|while|with|yield"
             )
-            return [
-                (rf"\b({keywords})\b", "#275EFE", 0),
-                (r"(#.*?$)", "#3F7D20", re.MULTILINE),
-                *common,
-            ]
+            builtins = (
+                "abs|all|any|bool|bytes|dict|dir|enumerate|filter|float|format|int|len|list|map|"
+                "max|min|open|print|range|repr|reversed|set|str|sum|tuple|type|zip|eval|exec|compile"
+            )
+            return re.compile(
+                rf"(?P<comment>#[^\n]*)|{string}|(?P<decorator>@[A-Za-z_][A-Za-z0-9_.]*)|"
+                rf"(?P<danger>\b(?:eval|exec|compile|pickle|subprocess|os\.system)\b)|"
+                rf"(?P<builtin>\b(?:{builtins})\b)|(?P<keyword>\b(?:{keywords})\b)|{number}"
+            )
         if extension in {".js", ".ts"}:
             keywords = (
-                "break|case|catch|class|const|continue|debugger|default|delete|do|else|"
-                "export|extends|finally|for|function|if|import|in|instanceof|let|new|"
-                "return|switch|this|throw|try|typeof|var|void|while|yield"
+                "async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|"
+                "export|extends|finally|for|from|function|get|if|import|in|instanceof|let|new|null|"
+                "of|return|set|static|super|switch|this|throw|true|try|typeof|undefined|var|void|"
+                "while|with|yield"
             )
-            return [
-                (rf"\b({keywords})\b", "#275EFE", 0),
-                (r"(//.*?$)", "#3F7D20", re.MULTILINE),
-                *common,
-            ]
-        return common
+            return re.compile(
+                rf"(?P<comment>//[^\n]*|/\*[\s\S]*?\*/)|{string}|"
+                rf"(?P<danger>\b(?:eval|Function|setTimeout|setInterval|innerHTML|document\.write)\b)|"
+                rf"(?P<keyword>\b(?:{keywords})\b)|{number}"
+            )
+        if extension == ".java":
+            keywords = (
+                "abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|"
+                "double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|"
+                "int|interface|long|native|new|null|package|private|protected|public|record|return|"
+                "short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|var|"
+                "void|volatile|while|true|false"
+            )
+            return re.compile(
+                rf"(?P<comment>//[^\n]*|/\*[\s\S]*?\*/)|{string}|"
+                rf"(?P<danger>\b(?:Runtime|ProcessBuilder|exec|Statement|executeQuery|ObjectInputStream)\b)|"
+                rf"(?P<keyword>\b(?:{keywords})\b)|{number}"
+            )
+        if extension in {".html", ".htm"}:
+            return re.compile(
+                rf"(?P<comment><!--[\s\S]*?-->)|{string}|(?P<tag></?[A-Za-z][A-Za-z0-9:-]*|/?>)|"
+                rf"(?P<keyword>\b(?:class|id|href|src|style|script|onload|onclick|name|value|type)\b)|{number}",
+                re.IGNORECASE,
+            )
+        if extension == ".css":
+            return re.compile(
+                rf"(?P<comment>/\*[\s\S]*?\*/)|{string}|(?P<keyword>\b(?:color|background|display|position|"
+                rf"grid|flex|margin|padding|border|width|height|font|font-family|font-size|line-height|"
+                rf"transform|transition|animation|opacity|z-index)\b)|(?P<tag>[.#]?[A-Za-z_-][A-Za-z0-9_-]*(?=\s*\{{))|{number}",
+                re.IGNORECASE,
+            )
+        return None
+
+    def _match_color(self, match: re.Match[str], extension: str) -> str:
+        if match.lastgroup == "comment":
+            return "#3F7D20"
+        if match.lastgroup == "string":
+            return "#B87514"
+        if match.lastgroup == "number":
+            return "#6B8E23"
+        if match.lastgroup == "keyword":
+            return "#275EFE"
+        if match.lastgroup == "danger":
+            return "#B3261E"
+        if match.lastgroup in {"variable", "superglobal", "decorator", "builtin"}:
+            return "#9A6700"
+        if match.lastgroup in {"tag"}:
+            return "#0B6E99"
+        return "#49454F"

@@ -10,3 +10,4 @@ Dialog 1.0 ../../Core/Controls/Dialog.qml
 Tabs 1.0 ../../Core/Controls/Tabs.qml
 FAB 1.0 ../../Core/Controls/FAB.qml
 CodeEditor 1.0 ../../Core/Controls/CodeEditor.qml
+ComboBox 1.0 ../../Core/Controls/ComboBox.qml
