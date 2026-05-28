@@ -42,7 +42,7 @@ class GenericRuleEngine:
             if os.path.exists(rules_file):
                 with open(rules_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    rules = data.get('rules', [])
+                    rules = [self._normalize_rule(rule) for rule in data.get('rules', []) if rule.get("enabled", True)]
                     logger.info(f"从 {rules_file} 加载了 {len(rules)} 条规则")
                     return rules
             else:
@@ -51,6 +51,17 @@ class GenericRuleEngine:
         except Exception as e:
             logger.error(f"加载规则文件 {rules_file} 失败: {str(e)}")
             return []
+
+    def _normalize_rule(self, rule: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": rule.get("id", "UNKNOWN"),
+            "name": rule.get("name", rule.get("id", "未知规则")),
+            "type": rule.get("type", "REGEX"),
+            "pattern": rule.get("pattern", ""),
+            "severity": rule.get("severity", "Medium"),
+            "description": rule.get("description", ""),
+            "flags": rule.get("flags", []),
+        }
     
     def get_rules_by_language(self, language: str) -> List[Dict[str, Any]]:
         """
@@ -116,7 +127,7 @@ class GenericRuleEngine:
         if rule_type == "REGEX":
             try:
                 # 编译正则表达式
-                regex = re.compile(pattern)
+                regex = re.compile(pattern, self._regex_flags(rule.get("flags", [])))
                 # 在整个文件内容中查找匹配项
                 for match in regex.finditer(content):
                     line_number = content[:match.start()].count('\n') + 1
@@ -133,3 +144,19 @@ class GenericRuleEngine:
                 logger.error(f"规则 {rule['id']} 的正则表达式错误: {str(e)}")
         
         return results
+
+    def _regex_flags(self, flags: Any) -> int:
+        if isinstance(flags, str):
+            flags = [flags]
+        value = 0
+        mapping = {
+            "IGNORECASE": re.IGNORECASE,
+            "I": re.IGNORECASE,
+            "MULTILINE": re.MULTILINE,
+            "M": re.MULTILINE,
+            "DOTALL": re.DOTALL,
+            "S": re.DOTALL,
+        }
+        for flag in flags or []:
+            value |= mapping.get(str(flag).upper(), 0)
+        return value

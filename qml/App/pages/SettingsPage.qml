@@ -7,7 +7,8 @@ PageFrame {
     subtitle: "主题状态由 Python StyleManager 暴露给 QML。"
 
     property var seeds: ["#006A60", "#6750A4", "#8C1D18", "#00639B"]
-    property var availableFonts: Qt.fontFamilies().sort()
+    property var availableFonts: []
+    property var style: styleManager
 
     MD.Card {
         width: 520
@@ -22,8 +23,8 @@ PageFrame {
                 color: Styles.Theme.color.onSurface
             }
             MD.Switch {
-                checked: styleManager.isDarkTheme
-                onToggled: styleManager.setDarkTheme(checked)
+                checked: style ? style.isDarkTheme : false
+                onToggled: if (style) style.setDarkTheme(checked)
             }
         }
 
@@ -42,13 +43,13 @@ PageFrame {
                     height: 44
                     radius: 22
                     color: modelData
-                    border.width: styleManager.seedColor.toUpperCase() === modelData ? 3 : 1
-                    border.color: styleManager.seedColor.toUpperCase() === modelData ? Styles.Theme.color.onSurface : Styles.Theme.color.outline
+                    border.width: style && style.seedColor.toUpperCase() === modelData ? 3 : 1
+                    border.color: style && style.seedColor.toUpperCase() === modelData ? Styles.Theme.color.onSurface : Styles.Theme.color.outline
 
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: styleManager.setSeedColor(modelData)
+                        onClicked: if (style) style.setSeedColor(modelData)
                     }
                 }
             }
@@ -63,9 +64,11 @@ PageFrame {
         MD.ComboBox {
             width: 360
             model: availableFonts
-            currentText: styleManager.uiFontFamily
+            currentText: style ? style.uiFontFamily : ""
             placeholderText: "例如 Microsoft YaHei UI"
-            onActivated: styleManager.setUiFontFamily(text)
+            useCurrentFontPreview: true
+            onAboutToOpen: if (availableFonts.length === 0) availableFonts = Qt.fontFamilies().sort()
+            onActivated: if (style) style.setUiFontFamily(text)
         }
 
         Text {
@@ -77,9 +80,11 @@ PageFrame {
         MD.ComboBox {
             width: 360
             model: availableFonts
-            currentText: styleManager.editorFontFamily
+            currentText: style ? style.editorFontFamily : ""
             placeholderText: "例如 JetBrains Mono"
-            onActivated: styleManager.setEditorFontFamily(text)
+            useCurrentFontPreview: true
+            onAboutToOpen: if (availableFonts.length === 0) availableFonts = Qt.fontFamilies().sort()
+            onActivated: if (style) style.setEditorFontFamily(text)
         }
     }
 }

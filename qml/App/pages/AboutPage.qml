@@ -16,7 +16,7 @@ PageFrame {
             Image {
                 width: 72
                 height: 72
-                source: "../../../app.ico"
+                source: "../../../assets/icons/app.ico"
                 fillMode: Image.PreserveAspectFit
                 smooth: true
             }

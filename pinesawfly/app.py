@@ -9,6 +9,7 @@ from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
 from .audit_bridge import AuditBridge
+from .rule_manager import RuleManager
 from .stylemanager import StyleManager
 
 
@@ -20,7 +21,7 @@ def main() -> int:
     app.setOrganizationName("PineSawFly")
 
     project_root = Path(__file__).resolve().parent.parent
-    icon_path = project_root / "app.ico"
+    icon_path = project_root / "assets" / "icons" / "app.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
@@ -31,8 +32,10 @@ def main() -> int:
 
     style_manager = StyleManager()
     audit_bridge = AuditBridge()
+    rule_manager = RuleManager(project_root / "rules")
     engine.rootContext().setContextProperty("styleManager", style_manager)
     engine.rootContext().setContextProperty("auditBridge", audit_bridge)
+    engine.rootContext().setContextProperty("ruleManager", rule_manager)
     material_icons_path = project_root / "assets" / "fonts" / "MaterialIcons-Regular.ttf"
     engine.rootContext().setContextProperty(
         "materialIconsFontUrl",

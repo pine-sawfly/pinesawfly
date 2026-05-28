@@ -8,7 +8,9 @@ Item {
     property var model: []
     property string currentText: ""
     property string placeholderText: ""
+    property bool useCurrentFontPreview: false
     signal activated(string text)
+    signal aboutToOpen()
 
     width: 320
     height: 56
@@ -52,7 +54,14 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: popup.opened ? popup.close() : popup.open()
+        onClicked: {
+            if (popup.opened) {
+                popup.close()
+            } else {
+                root.aboutToOpen()
+                popup.open()
+            }
+        }
     }
 
     Popup {
@@ -93,7 +102,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData
                     elide: Text.ElideRight
-                    font.family: modelData
+                    font.family: root.useCurrentFontPreview ? modelData : Styles.Theme.typography.family
                     font.pixelSize: 14
                     color: modelData === root.currentText ? Styles.Theme.color.onPrimaryContainer : Styles.Theme.color.onSurface
                 }

@@ -16,6 +16,7 @@ Rectangle {
         { label: "组件", icon: "widgets", source: "pages/ComponentsPage.qml" },
         { label: "颜色", icon: "palette", source: "pages/ColorPage.qml" },
         { label: "字体", icon: "text_fields", source: "pages/TypographyPage.qml" },
+        { label: "规则", icon: "rule", source: "pages/RulesPage.qml" },
         { label: "设置", icon: "settings", source: "pages/SettingsPage.qml" },
         { label: "关于", icon: "info", source: "pages/AboutPage.qml" }
     ]

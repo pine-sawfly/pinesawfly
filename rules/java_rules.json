@@ -1,4 +1,6 @@
 {
+  "version": 1,
+  "language": "java",
   "rules": [
     {
       "id": "JAVA001",
@@ -6,7 +8,9 @@
       "type": "REGEX",
       "pattern": "Runtime\\.getRuntime\\(\\)\\.exec\\(",
       "severity": "High",
-      "description": "检测到Runtime.getRuntime().exec()调用，可能导致命令执行"
+      "description": "检测到Runtime.getRuntime().exec()调用，可能导致命令执行",
+      "enabled": true,
+      "flags": []
     },
     {
       "id": "JAVA002",
@@ -14,7 +18,9 @@
       "type": "REGEX",
       "pattern": "createStatement\\(\\)\\.execute\\(",
       "severity": "High",
-      "description": "检测到直接执行SQL语句，可能存在SQL注入风险"
+      "description": "检测到直接执行SQL语句，可能存在SQL注入风险",
+      "enabled": true,
+      "flags": []
     },
     {
       "id": "JAVA003",
@@ -22,7 +28,9 @@
       "type": "REGEX",
       "pattern": "readObject\\s*\\(",
       "severity": "High",
-      "description": "检测到readObject方法调用，可能存在反序列化漏洞"
+      "description": "检测到readObject方法调用，可能存在反序列化漏洞",
+      "enabled": true,
+      "flags": []
     }
   ]
 }
