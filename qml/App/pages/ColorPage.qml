@@ -25,7 +25,7 @@ PageFrame {
                 Rectangle {
                     width: parent.width
                     height: 54
-                    radius: 8
+                    radius: Styles.Theme.shape.medium
                     color: Styles.Theme.color[modelData]
                     border.color: Styles.Theme.color.outlineVariant
                     border.width: 1

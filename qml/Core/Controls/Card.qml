@@ -8,7 +8,7 @@ Rectangle {
     property string title: ""
     property string subtitle: ""
 
-    radius: Styles.Theme.shape.small
+    radius: Styles.Theme.shape.medium
     color: Styles.Theme.color.surfaceContainer
     border.color: Styles.Theme.color.outlineVariant
     border.width: 1

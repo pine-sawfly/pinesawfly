@@ -22,7 +22,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: Styles.Theme.shape.small
+        radius: Styles.Theme.shape.medium
         color: Styles.Theme.color.surfaceContainer
         border.width: popup.opened ? 2 : 1
         border.color: popup.opened ? Styles.Theme.color.primary : Styles.Theme.color.outline
@@ -91,7 +91,7 @@ Item {
             delegate: Rectangle {
                 width: list.width
                 height: 40
-                radius: 8
+                radius: Styles.Theme.shape.small
                 color: modelData === root.currentText ? Styles.Theme.color.primaryContainer : (hover.containsMouse ? Styles.Theme.color.surfaceVariant : "transparent")
 
                 Text {

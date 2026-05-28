@@ -13,6 +13,27 @@ from .rule_manager import RuleManager
 from .stylemanager import StyleManager
 
 
+def _enable_windows_rounded_corners(window: object) -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        hwnd = int(window.winId())
+        DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        DWMWCP_ROUND = 2
+        preference = ctypes.c_int(DWMWCP_ROUND)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            wintypes.HWND(hwnd),
+            wintypes.DWORD(DWMWA_WINDOW_CORNER_PREFERENCE),
+            ctypes.byref(preference),
+            ctypes.sizeof(preference),
+        )
+    except Exception:
+        logging.getLogger(__name__).debug("Unable to enable native Windows rounded corners", exc_info=True)
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
@@ -45,6 +66,7 @@ def main() -> int:
     engine.load(QUrl.fromLocalFile(str(qml_root / "App" / "Main.qml")))
     if not engine.rootObjects():
         return 1
+    _enable_windows_rounded_corners(engine.rootObjects()[0])
     return app.exec()
 
 

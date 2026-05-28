@@ -31,10 +31,14 @@ PageFrame {
                 model: bridge ? bridge.files : []
 
                 delegate: Rectangle {
+                    id: fileRow
                     width: ListView.view.width
                     height: 36
-                    radius: 8
-                    color: mouse.containsMouse ? Styles.Theme.color.surfaceContainerHigh : "transparent"
+                    radius: Styles.Theme.shape.medium
+                    property bool selected: bridge && bridge.currentFile === modelData.absolutePath
+                    color: selected
+                           ? Styles.Theme.color.primaryContainer
+                           : (mouse.containsMouse ? Styles.Theme.color.surfaceContainerHigh : "transparent")
 
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
@@ -48,7 +52,7 @@ PageFrame {
                             text: "description"
                             font.family: Styles.Fonts.iconFamily
                             font.pixelSize: 18
-                            color: Styles.Theme.color.primary
+                            color: fileRow.selected ? Styles.Theme.color.onPrimaryContainer : Styles.Theme.color.primary
                         }
 
                         Text {
@@ -57,7 +61,7 @@ PageFrame {
                             elide: Text.ElideMiddle
                             font.family: Styles.Theme.typography.family
                             font.pixelSize: 13
-                            color: Styles.Theme.color.onSurface
+                            color: fileRow.selected ? Styles.Theme.color.onPrimaryContainer : Styles.Theme.color.onSurface
                         }
                     }
 
@@ -125,7 +129,7 @@ PageFrame {
             delegate: Rectangle {
                 width: ListView.view.width
                 height: 46
-                radius: 8
+                radius: Styles.Theme.shape.medium
                 color: mouse2.containsMouse ? Styles.Theme.color.surfaceContainerHigh : "transparent"
 
                 Row {

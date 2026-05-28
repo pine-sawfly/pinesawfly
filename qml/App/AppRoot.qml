@@ -11,6 +11,7 @@ Rectangle {
 
     property int currentIndex: 0
     property var bridge: auditBridge
+    property real windowRadius: 0
     property var pages: [
         { label: "首页", icon: "home", source: "pages/HomePage.qml" },
         { label: "组件", icon: "widgets", source: "pages/ComponentsPage.qml" },
@@ -35,6 +36,23 @@ Rectangle {
             width: 272
             height: parent.height
             color: Styles.Theme.color.surfaceContainer
+            radius: root.windowRadius
+
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                width: parent.radius
+                height: parent.height
+                color: parent.color
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                width: parent.width
+                height: parent.radius
+                color: parent.color
+            }
 
             Column {
                 anchors.fill: parent
@@ -164,6 +182,23 @@ Rectangle {
             width: parent.width - drawer.width
             height: parent.height
             color: Styles.Theme.color.surface
+            radius: root.windowRadius
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                width: parent.radius
+                height: parent.height
+                color: parent.color
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                width: parent.width
+                height: parent.radius
+                color: parent.color
+            }
 
             Loader {
                 id: pageLoader

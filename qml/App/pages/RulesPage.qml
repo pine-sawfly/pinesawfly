@@ -35,7 +35,7 @@ PageFrame {
 
     MD.Card {
         width: parent.width
-        height: 240
+        height: 270
 
         Text {
             text: editing ? "编辑规则" : "新增规则"
@@ -75,11 +75,15 @@ PageFrame {
             }
         }
 
+        Item { width: 1; height: 4 }
+
         MD.TextField {
             id: patternField
             width: parent.width
             placeholderText: "正则表达式，例如 \\beval\\s*\\("
         }
+
+        Item { width: 1; height: 6 }
 
         Row {
             width: parent.width
@@ -123,120 +127,147 @@ PageFrame {
         width: parent.width
         height: 520
 
-        Row {
+        Item {
             width: parent.width
-            spacing: 12
+            height: parent.height
 
-            Text {
-                text: "规则列表"
-                width: parent.width - 360
-                font.pixelSize: 18
-                font.weight: Font.DemiBold
-                color: Styles.Theme.color.onSurface
-            }
+            Row {
+                id: listHeader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 56
+                spacing: 12
 
-            MD.ComboBox {
-                width: 150
-                model: ["all", "php", "python", "java"]
-                currentText: languageFilter
-                onActivated: languageFilter = text
-            }
-
-            MD.Button {
-                width: 120
-                text: "刷新"
-                icon: "refresh"
-                type: "tonal"
-                onClicked: if (rulesBridge) rulesBridge.reload()
-            }
-        }
-
-        Text {
-            text: rulesBridge ? rulesBridge.status : ""
-            width: parent.width
-            wrapMode: Text.WordWrap
-            font.pixelSize: 13
-            color: Styles.Theme.color.onSurfaceVariant
-        }
-
-        ListView {
-            width: parent.width
-            height: 420
-            clip: true
-            model: rulesBridge ? rulesBridge.rules : []
-
-            delegate: Rectangle {
-                width: ListView.view.width
-                height: languageFilter === "all" || modelData.language === languageFilter ? 66 : 0
-                visible: height > 0
-                radius: 8
-                color: hover.containsMouse ? Styles.Theme.color.surfaceContainerHigh : "transparent"
-
-                Row {
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 10
-
-                    MD.Checkbox {
-                        width: 32
-                        checked: modelData.enabled
-                        onToggled: if (rulesBridge) rulesBridge.setRuleEnabled(modelData.key, checked)
-                    }
-
-                    Column {
-                        width: Math.max(220, parent.width - 300)
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 3
-
-                        Text {
-                            width: parent.width
-                            text: "[" + modelData.language + "] " + modelData.id + "  " + modelData.name
-                            elide: Text.ElideRight
-                            color: Styles.Theme.color.onSurface
-                            font.pixelSize: 14
-                            font.weight: Font.DemiBold
-                        }
-
-                        Text {
-                            width: parent.width
-                            text: modelData.severity + " · " + modelData.pattern
-                            elide: Text.ElideRight
-                            color: Styles.Theme.color.primary
-                            font.pixelSize: 12
-                            font.family: Styles.Fonts.monoFamily
-                        }
-
-                        Text {
-                            width: parent.width
-                            text: modelData.description
-                            elide: Text.ElideRight
-                            color: Styles.Theme.color.onSurfaceVariant
-                            font.pixelSize: 12
-                        }
-                    }
-
-                    MD.Button {
-                        width: 88
-                        text: "编辑"
-                        icon: "edit"
-                        type: "tonal"
-                        onClicked: editRule(modelData)
-                    }
-
-                    MD.Button {
-                        width: 88
-                        text: "删除"
-                        icon: "delete"
-                        type: "outlined"
-                        onClicked: if (rulesBridge) rulesBridge.deleteRule(modelData.key)
-                    }
+                Text {
+                    text: "规则列表"
+                    width: parent.width - 294
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.pixelSize: 18
+                    font.weight: Font.DemiBold
+                    color: Styles.Theme.color.onSurface
                 }
 
-                MouseArea {
-                    id: hover
+                MD.ComboBox {
+                    width: 150
+                    model: ["all", "php", "python", "java"]
+                    currentText: languageFilter
+                    onActivated: languageFilter = text
+                }
+
+                MD.Button {
+                    width: 120
+                    text: "刷新"
+                    icon: "refresh"
+                    type: "tonal"
+                    onClicked: if (rulesBridge) rulesBridge.reload()
+                }
+            }
+
+            Text {
+                id: statusText
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: listHeader.bottom
+                height: 28
+                text: rulesBridge ? rulesBridge.status : ""
+                wrapMode: Text.WordWrap
+                font.pixelSize: 13
+                color: Styles.Theme.color.onSurfaceVariant
+            }
+
+            Rectangle {
+                id: listFrame
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: statusText.bottom
+                anchors.bottom: parent.bottom
+                radius: Styles.Theme.shape.medium
+                color: "transparent"
+                border.color: Styles.Theme.color.outlineVariant
+                border.width: 1
+                clip: true
+
+                ListView {
                     anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
+                    anchors.margins: 6
+                    clip: true
+                    model: rulesBridge ? rulesBridge.rules : []
+
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: languageFilter === "all" || modelData.language === languageFilter ? 66 : 0
+                        visible: height > 0
+                        radius: Styles.Theme.shape.medium
+                        color: hover.containsMouse ? Styles.Theme.color.surfaceContainerHigh : "transparent"
+
+                        Row {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 10
+
+                            MD.Checkbox {
+                                width: 32
+                                checked: modelData.enabled
+                                onToggled: if (rulesBridge) rulesBridge.setRuleEnabled(modelData.key, checked)
+                            }
+
+                            Column {
+                                width: Math.max(220, parent.width - 300)
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 3
+
+                                Text {
+                                    width: parent.width
+                                    text: "[" + modelData.language + "] " + modelData.id + "  " + modelData.name
+                                    elide: Text.ElideRight
+                                    color: Styles.Theme.color.onSurface
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: modelData.severity + " · " + modelData.pattern
+                                    elide: Text.ElideRight
+                                    color: Styles.Theme.color.primary
+                                    font.pixelSize: 12
+                                    font.family: Styles.Fonts.monoFamily
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    text: modelData.description
+                                    elide: Text.ElideRight
+                                    color: Styles.Theme.color.onSurfaceVariant
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            MD.Button {
+                                width: 88
+                                text: "编辑"
+                                icon: "edit"
+                                type: "tonal"
+                                onClicked: editRule(modelData)
+                            }
+
+                            MD.Button {
+                                width: 88
+                                text: "删除"
+                                icon: "delete"
+                                type: "outlined"
+                                onClicked: if (rulesBridge) rulesBridge.deleteRule(modelData.key)
+                            }
+                        }
+
+                        MouseArea {
+                            id: hover
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            acceptedButtons: Qt.NoButton
+                        }
+                    }
                 }
             }
         }

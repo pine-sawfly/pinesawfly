@@ -17,7 +17,7 @@ TextField {
     topPadding: 14
 
     background: Rectangle {
-        radius: Styles.Theme.shape.small
+        radius: Styles.Theme.shape.medium
         color: Styles.Theme.color.surfaceContainer
         border.color: root.activeFocus ? Styles.Theme.color.primary : Styles.Theme.color.outline
         border.width: root.activeFocus ? 2 : 1
