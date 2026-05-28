@@ -1,0 +1,12 @@
+[project]
+name = "pinesawfly"
+version = "0.1.0"
+description = "PySide6/QML desktop security audit tool"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pyside6==6.6.0",
+]
+
+[project.scripts]
+pinesawfly = "pinesawfly.app:main"

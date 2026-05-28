@@ -1,0 +1,12 @@
+module md3.Core
+
+Button 1.0 ../../Core/Controls/Button.qml
+Card 1.0 ../../Core/Controls/Card.qml
+Switch 1.0 ../../Core/Controls/Switch.qml
+Checkbox 1.0 ../../Core/Controls/Checkbox.qml
+Slider 1.0 ../../Core/Controls/Slider.qml
+TextField 1.0 ../../Core/Controls/TextField.qml
+Dialog 1.0 ../../Core/Controls/Dialog.qml
+Tabs 1.0 ../../Core/Controls/Tabs.qml
+FAB 1.0 ../../Core/Controls/FAB.qml
+CodeEditor 1.0 ../../Core/Controls/CodeEditor.qml
