@@ -9,11 +9,12 @@ Item {
     property string currentText: ""
     property string placeholderText: ""
     property bool useCurrentFontPreview: false
+    property bool dense: false
     signal activated(string text)
     signal aboutToOpen()
 
     width: 320
-    height: 56
+    height: dense ? 44 : 56
 
     onCurrentTextChanged: {
         if (popup.opened && list.currentIndex !== root.model.indexOf(root.currentText))

@@ -6,15 +6,18 @@ TextField {
     id: root
 
     property string label: ""
+    property bool dense: false
 
-    implicitHeight: 56
+    implicitHeight: dense ? 44 : 56
     color: Styles.Theme.color.onSurface
     placeholderTextColor: Styles.Theme.color.onSurfaceVariant
     font.family: Styles.Theme.typography.family
     font.pixelSize: 14
     leftPadding: 16
     rightPadding: 16
-    topPadding: 14
+    topPadding: 0
+    bottomPadding: 0
+    verticalAlignment: TextInput.AlignVCenter
 
     background: Rectangle {
         radius: Styles.Theme.shape.medium

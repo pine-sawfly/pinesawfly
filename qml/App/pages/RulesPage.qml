@@ -4,7 +4,7 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "规则"
-    subtitle: "管理通用 REGEX 扫描规则。规则会保存到 rules 目录，扫描时由 Python 合并为 JSON 后加载。"
+    // subtitle: "管理通用 REGEX 扫描规则。规则会保存到 rules 目录，扫描时由 Python 合并为 JSON 后加载。"
 
     property var rulesBridge: ruleManager
     property string ruleLanguage: "php"
@@ -35,7 +35,7 @@ PageFrame {
 
     MD.Card {
         width: parent.width
-        height: 270
+        height: 262
 
         Text {
             text: editing ? "编辑规则" : "新增规则"
@@ -50,6 +50,7 @@ PageFrame {
 
             MD.ComboBox {
                 width: 140
+                dense: true
                 model: ["php", "python", "java"]
                 currentText: ruleLanguage
                 onActivated: ruleLanguage = text
@@ -57,6 +58,7 @@ PageFrame {
 
             MD.ComboBox {
                 width: 150
+                dense: true
                 model: ["Critical", "High", "Medium", "Low"]
                 currentText: ruleSeverity
                 onActivated: ruleSeverity = text
@@ -65,12 +67,14 @@ PageFrame {
             MD.TextField {
                 id: ruleIdField
                 width: 150
+                dense: true
                 placeholderText: "规则ID"
             }
 
             MD.TextField {
                 id: ruleNameField
                 width: Math.max(220, parent.width - 490)
+                dense: true
                 placeholderText: "规则名称"
             }
         }
@@ -80,6 +84,7 @@ PageFrame {
         MD.TextField {
             id: patternField
             width: parent.width
+            dense: true
             placeholderText: "正则表达式，例如 \\beval\\s*\\("
         }
 
@@ -92,6 +97,7 @@ PageFrame {
             MD.TextField {
                 id: descriptionField
                 width: Math.max(360, parent.width - 136)
+                dense: true
                 placeholderText: "规则描述"
             }
 
@@ -121,6 +127,8 @@ PageFrame {
                 onClicked: clearForm()
             }
         }
+
+        Item { width: 1; height: 10 }
     }
 
     MD.Card {
@@ -150,6 +158,7 @@ PageFrame {
 
                 MD.ComboBox {
                     width: 150
+                    dense: true
                     model: ["all", "php", "python", "java"]
                     currentText: languageFilter
                     onActivated: languageFilter = text
@@ -183,9 +192,8 @@ PageFrame {
                 anchors.top: statusText.bottom
                 anchors.bottom: parent.bottom
                 radius: Styles.Theme.shape.medium
-                color: "transparent"
-                border.color: Styles.Theme.color.outlineVariant
-                border.width: 1
+                color: Styles.Theme.color.surfaceContainer
+                border.width: 0
                 clip: true
 
                 ListView {
