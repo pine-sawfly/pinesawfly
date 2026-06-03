@@ -36,8 +36,8 @@ class ScanWorker(QObject):
     def run(self) -> None:
         try:
             rows = self._run_scan()
-            label = "??????" if self.deep else "????"
-            self.finished.emit(rows, len(rows), f"{label}??? {len(rows)} ???")
+            label = "深度扫描完成" if self.deep else "扫描完成"
+            self.finished.emit(rows, len(rows), f"{label}，发现 {len(rows)} 个问题")
         except Exception as exc:  # noqa: BLE001 - surface the error to QML
             logger.exception("scan failed")
             self.failed.emit(str(exc))
@@ -76,9 +76,9 @@ class ScanWorker(QObject):
 
     def _normalize_vuln(self, project: Path, file_path: Path, vuln: dict) -> dict[str, object]:
         return {
-            "ruleId": vuln.get("rule_id", "??"),
-            "ruleName": vuln.get("rule_name", "??"),
-            "severity": vuln.get("severity", "??"),
+            "ruleId": vuln.get("rule_id", "未知"),
+            "ruleName": vuln.get("rule_name", "未知"),
+            "severity": vuln.get("severity", "未知"),
             "file": str(file_path.relative_to(project)),
             "line": int(vuln.get("line") or 0),
             "description": vuln.get("description", ""),
@@ -103,9 +103,9 @@ class AuditBridge(QObject):
         self._files: list[dict[str, object]] = []
         self._findings: list[dict[str, object]] = []
         self._current_file = ""
-        self._current_content = "?????????????"
+        self._current_content = "请选择左侧文件以查看代码。"
         self._current_highlighted_content = self._highlight_code(self._current_content, "")
-        self._status = "??"
+        self._status = "就绪"
         self._scanning = False
         self._thread: QThread | None = None
         self._worker: ScanWorker | None = None
@@ -125,13 +125,13 @@ class AuditBridge(QObject):
     def setProjectPath(self, path_or_url: str) -> None:
         path = normalize_path(path_or_url)
         if not path or not os.path.isdir(path):
-            self._set_status(f"??????: {path}")
+            self._set_status(f"项目目录无效: {path}")
             return
         self._project_path = os.path.abspath(path)
         self._files = self._collect_files(self._project_path)
         self.projectPathChanged.emit()
         self.filesChanged.emit()
-        self._set_status(f"?????: {self._project_path}")
+        self._set_status(f"已打开项目: {self._project_path}")
 
     def _collect_files(self, project_path: str) -> list[dict[str, object]]:
         root = Path(project_path)
@@ -155,22 +155,22 @@ class AuditBridge(QObject):
             self.currentContentChanged.emit()
             self.currentHighlightedContentChanged.emit()
             self.currentFileChanged.emit()
-            self._set_status(f"?????: {path}")
+            self._set_status(f"已加载文件: {path}")
         except Exception as exc:  # noqa: BLE001 - message is shown in UI
-            self._set_status(f"??????: {exc}")
+            self._set_status(f"无法读取文件: {exc}")
 
     @Slot(str, int)
     def openFinding(self, file_path: str, line: int) -> None:
         self.openFile(file_path)
         if line:
-            self._set_status(f"??? {file_path}:{line}")
+            self._set_status(f"定位到 {file_path}:{line}")
 
     @Slot(bool)
     def startScan(self, deep: bool = False) -> None:
         if self._scanning:
             return
         self._set_scanning(True)
-        self._set_status("????...")
+        self._set_status("正在扫描...")
         self._findings = []
         self.findingsChanged.emit()
         self._thread = QThread()
@@ -194,7 +194,7 @@ class AuditBridge(QObject):
 
     @Slot(str)
     def _on_scan_failed(self, message: str) -> None:
-        self._set_status(f"????: {message}")
+        self._set_status(f"扫描失败: {message}")
         self._set_scanning(False)
 
     @Slot()

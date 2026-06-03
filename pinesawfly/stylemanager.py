@@ -4,8 +4,6 @@ from PySide6.QtCore import QObject, Property, QSettings, Signal, Slot
 
 
 class StyleManager(QObject):
-    """Expose Material-like color schemes to QML."""
-
     themeChanged = Signal()
 
     def __init__(self) -> None:

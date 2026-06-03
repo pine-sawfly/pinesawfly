@@ -1,72 +1,44 @@
-import os
+from __future__ import annotations
+
 import logging
 from pathlib import Path
+from typing import Iterator
+
 from core.exception_handler import safe_operation
 
 logger = logging.getLogger(__name__)
 
+
 class FileProcessor:
-    """
-    文件处理工具类
-    """
-    
     @staticmethod
     @safe_operation
-    def get_php_files(directory: str) -> list:
-        """
-        获取目录中的所有PHP文件
-        """
-        php_files = []
+    def get_php_files(directory: str) -> list[str]:
         try:
-            path = Path(directory)
-            for file_path in path.rglob("*.php"):
-                php_files.append(str(file_path))
-        except Exception as e:
-            logger.error(f"获取目录 {directory} 中的PHP文件时出错: {str(e)}")
-        
-        logger.info(f"在目录 {directory} 中找到 {len(php_files)} 个PHP文件")
-        return php_files
-    
+            return [str(file_path) for file_path in Path(directory).rglob("*.php")]
+        except OSError as exc:
+            logger.error("Failed to collect PHP files from %s: %s", directory, exc)
+            return []
+
     @staticmethod
     @safe_operation
     def read_file_with_encoding(file_path: str) -> str:
-        """
-        以适当的编码读取文件
-        """
-        encodings = ['utf-8', 'gbk', 'latin1']
-        
-        for encoding in encodings:
+        path = Path(file_path)
+        for encoding in ("utf-8", "gbk", "latin1"):
             try:
-                with open(file_path, 'r', encoding=encoding) as file:
-                    content = file.read()
-                    logger.info(f"使用 {encoding} 编码成功读取文件 {file_path}")
-                    return content
+                return path.read_text(encoding=encoding)
             except UnicodeDecodeError:
                 continue
-            except Exception as e:
-                logger.error(f"读取文件 {file_path} 时出错: {str(e)}")
-                raise
-        
-        raise UnicodeDecodeError(f"无法使用常见编码读取文件 {file_path}")
-    
+        raise UnicodeError(f"Unable to read file with supported encodings: {path}")
+
     @staticmethod
     @safe_operation
-    def chunk_read_file(file_path: str, chunk_size: int = 8192):
-        """
-        分块读取大文件
-        """
+    def chunk_read_file(file_path: str, chunk_size: int = 8192) -> Iterator[str]:
+        path = Path(file_path)
         try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                while True:
-                    chunk = file.read(chunk_size)
-                    if not chunk:
-                        break
+            with path.open("r", encoding="utf-8") as file:
+                while chunk := file.read(chunk_size):
                     yield chunk
         except UnicodeDecodeError:
-            # 尝试其他编码
-            with open(file_path, 'r', encoding='gbk') as file:
-                while True:
-                    chunk = file.read(chunk_size)
-                    if not chunk:
-                        break
+            with path.open("r", encoding="gbk") as file:
+                while chunk := file.read(chunk_size):
                     yield chunk
