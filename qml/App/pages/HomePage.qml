@@ -4,7 +4,6 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "审计工作台"
-    // subtitle: "选择项目、查看源码并运行规则扫描。前端使用 Qt Quick/QML，编辑器不依赖 QScintilla。"
     property var bridge: auditBridge
 
     Row {

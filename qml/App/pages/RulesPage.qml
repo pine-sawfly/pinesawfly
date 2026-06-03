@@ -4,7 +4,6 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "规则"
-    // subtitle: "管理通用 REGEX 扫描规则。规则会保存到 rules 目录，扫描时由 Python 合并为 JSON 后加载。"
 
     property var rulesBridge: ruleManager
     property string ruleLanguage: "php"

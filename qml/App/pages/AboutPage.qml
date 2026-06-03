@@ -48,7 +48,6 @@ PageFrame {
         Text {
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "Python 负责应用启动、主题状态和扫描桥接；QML 负责界面、控件、动画和页面切换。代码查看器改为 QML 原生实现，避免 QScintilla 在 Windows 上的安装和兼容性问题。"
             font.pixelSize: 14
             color: Styles.Theme.color.onSurfaceVariant
         }
