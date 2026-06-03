@@ -6,14 +6,15 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "审计工作台"
+
     property var bridge: auditBridge
-    property var reportFormats: ["Markdown", "HTML", "JSON", "TXT"]
+    property var reportFormats: ["Markdown", "HTML", "PDF", "JSON", "TXT"]
 
     FileDialog {
         id: reportFileDialog
         title: "选择报告保存位置"
         fileMode: FileDialog.SaveFile
-        nameFilters: ["报告文件 (*.md *.html *.json *.txt)", "所有文件 (*)"]
+        nameFilters: ["报告文件 (*.md *.html *.pdf *.json *.txt)", "所有文件 (*)"]
         onAccepted: reportPathField.text = selectedFile.toString()
     }
 
@@ -66,7 +67,7 @@ PageFrame {
                         id: exportFormatCombo
                         width: parent.width
                         model: reportFormats
-                        currentText: bridge ? bridge.defaultReportFormat : "Markdown"
+                        currentText: "Markdown"
                     }
                 }
 
@@ -211,12 +212,14 @@ PageFrame {
 
             Row {
                 spacing: 10
+
                 MD.Button {
                     text: bridge && bridge.scanning ? "扫描中" : "扫描项目"
                     icon: "play_arrow"
                     enabled: bridge && !bridge.scanning
                     onClicked: bridge.startScan()
                 }
+
                 MD.Button {
                     text: "AI分析"
                     icon: "psychology"
@@ -224,13 +227,14 @@ PageFrame {
                     enabled: bridge && !bridge.scanning
                     onClicked: bridge.startAiAnalysis()
                 }
+
                 MD.Button {
                     text: "导出报告"
                     icon: "file_download"
                     type: "outlined"
                     enabled: bridge
                     onClicked: {
-                        exportFormatCombo.currentText = bridge.defaultReportFormat
+                        exportFormatCombo.currentText = "Markdown"
                         reportPathField.text = ""
                         exportPopup.open()
                     }

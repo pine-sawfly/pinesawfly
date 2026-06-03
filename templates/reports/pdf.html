@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      color: #1d1b20;
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+    }
+    h1 { color: #006a60; font-size: 23pt; margin-bottom: 6pt; }
+    h2 { color: #12372f; font-size: 15pt; margin-top: 18pt; }
+    h3 { color: #1d1b20; font-size: 12pt; margin-bottom: 6pt; }
+    .logo { width: 48px; height: 48px; object-fit: contain; }
+    .info-grid, .summary, .finding, .affected, .code-card {
+      border: 1px solid #d7e1dc;
+      border-radius: 10px;
+      padding: 10pt;
+      margin: 10pt 0;
+    }
+    .info-item { margin: 4pt 0; }
+    .info-label { color: #5f6f68; font-weight: 700; }
+    .info-value { color: #1d1b20; }
+    .summary { background: #f3faf6; }
+    .stats { margin-top: 8pt; }
+    .stat-badge {
+      display: inline-block;
+      padding: 3pt 7pt;
+      margin: 2pt;
+      border-radius: 10px;
+      background: #e6f2ed;
+      font-weight: 700;
+    }
+    .finding-header { border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; }
+    .finding-kicker { color: #64748b; font-weight: 700; }
+    .risk-tag { color: #b3261e; font-weight: 800; }
+    .finding-meta div { margin: 4pt 0; }
+    dt { color: #5f6f68; font-weight: 700; }
+    dd { margin: 2pt 0 0; }
+    pre {
+      background: #f4f6f8;
+      color: #1d1b20;
+      padding: 8pt;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 9pt;
+    }
+    .hit { background: rgba(244, 67, 54, 0.22); }
+    b { color: #64748b; }
+  </style>
+</head>
+
+<body>
+  <h1>{{ title }}</h1>
+  {{ logo }}
+
+  <section class="info-grid">
+    {{ author }}
+    {{ project_path }}
+    {{ generated_at }}
+  </section>
+
+  {{ overview }}
+
+  <h2>审计详情与发现</h2>
+  {{ findings }}
+
+  {{ affected_locations }}
+
+  {{ highlighted_code_snippets }}
+</body>
+
+</html>
