@@ -1,8 +1,8 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic as Controls
 import "../Styles" as Styles
 
-Slider {
+Controls.Slider {
     id: root
 
     from: 0

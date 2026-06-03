@@ -1,37 +1,31 @@
-import logging
+from __future__ import annotations
 
-from phply.phplex import lexer
-from phply.phpparse import make_parser
+from dataclasses import dataclass
+
+from tree_sitter import Language, Parser, Tree
+import tree_sitter_php
 
 from core.exception_handler import safe_operation
 from modules.file_module import FileModule
 
-logger = logging.getLogger(__name__)
+
+@dataclass(frozen=True)
+class PHPAst:
+    tree: Tree
+    source: bytes
+    content: str
 
 
 class PHPParser:
     def __init__(self):
-        self.parser = make_parser()
+        self.parser = Parser(Language(tree_sitter_php.language_php()))
 
     @safe_operation
-    def parse_file(self, file_path: str):
-        try:
-            logger.info(f"正在解析文件: {file_path}")
-            ast = self.parser.parse(FileModule.read_file_with_encoding(file_path), lexer=lexer.clone())
-            logger.info(f"文件 {file_path} 解析完成")
-            return ast
-
-        except Exception as e:
-            logger.error(f"解析文件 {file_path} 失败: {e}")
-            raise
+    def parse_file(self, file_path: str) -> PHPAst:
+        content = FileModule.read_file_with_encoding(file_path)
+        return self.parse_code(content)
 
     @safe_operation
-    def parse_code(self, code: str):
-        try:
-            logger.info("正在解析代码字符串")
-            ast = self.parser.parse(code, lexer=lexer.clone())
-            logger.info("代码字符串解析完成")
-            return ast
-        except Exception as e:
-            logger.error(f"解析代码字符串失败: {e}")
-            raise
+    def parse_code(self, code: str) -> PHPAst:
+        source = code.encode("utf-8", errors="replace")
+        return PHPAst(tree=self.parser.parse(source), source=source, content=code)

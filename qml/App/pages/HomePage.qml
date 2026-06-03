@@ -1,10 +1,139 @@
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
 import "../../Core/Styles" as Styles
 import "../../Core/Controls" as MD
 
 PageFrame {
     title: "审计工作台"
     property var bridge: auditBridge
+    property var reportFormats: ["Markdown", "HTML", "JSON", "TXT"]
+
+    FileDialog {
+        id: reportFileDialog
+        title: "选择报告保存位置"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["报告文件 (*.md *.html *.json *.txt)", "所有文件 (*)"]
+        onAccepted: reportPathField.text = selectedFile.toString()
+    }
+
+    Popup {
+        id: exportPopup
+        modal: true
+        focus: true
+        width: 520
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        anchors.centerIn: Overlay.overlay
+
+        background: Rectangle {
+            radius: Styles.Theme.shape.large
+            color: Styles.Theme.color.surfaceContainerHigh
+            border.color: Styles.Theme.color.outlineVariant
+            border.width: 1
+        }
+
+        contentItem: Item {
+            implicitWidth: 520
+            implicitHeight: exportContent.implicitHeight + 48
+
+            Column {
+                id: exportContent
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 18
+
+                Text {
+                    text: "导出报告"
+                    font.family: Styles.Theme.typography.family
+                    font.pixelSize: 22
+                    font.weight: Font.DemiBold
+                    color: Styles.Theme.color.onSurface
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+
+                    Text {
+                        text: "保存类型"
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 13
+                        color: Styles.Theme.color.onSurfaceVariant
+                    }
+
+                    MD.ComboBox {
+                        id: exportFormatCombo
+                        width: parent.width
+                        model: reportFormats
+                        currentText: bridge ? bridge.defaultReportFormat : "Markdown"
+                    }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+
+                    Text {
+                        text: "保存地址"
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 13
+                        color: Styles.Theme.color.onSurfaceVariant
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: 8
+
+                        MD.TextField {
+                            id: reportPathField
+                            width: parent.width - browseButton.width - 8
+                            placeholderText: "选择或输入报告保存路径"
+                        }
+
+                        MD.Button {
+                            id: browseButton
+                            text: "浏览"
+                            icon: "folder_open"
+                            type: "tonal"
+                            onClicked: reportFileDialog.open()
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: bridge ? bridge.status : ""
+                    wrapMode: Text.WordWrap
+                    font.family: Styles.Theme.typography.family
+                    font.pixelSize: 12
+                    color: Styles.Theme.color.primary
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    spacing: 8
+
+                    MD.Button {
+                        text: "取消"
+                        icon: "close"
+                        type: "text"
+                        onClicked: exportPopup.close()
+                    }
+
+                    MD.Button {
+                        text: "保存"
+                        icon: "save"
+                        enabled: bridge && reportPathField.text.length > 0
+                        onClicked: {
+                            if (bridge && bridge.exportReport(exportFormatCombo.currentText, reportPathField.text))
+                                exportPopup.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Row {
         width: parent.width
@@ -86,14 +215,25 @@ PageFrame {
                     text: bridge && bridge.scanning ? "扫描中" : "扫描项目"
                     icon: "play_arrow"
                     enabled: bridge && !bridge.scanning
-                    onClicked: bridge.startScan(false)
+                    onClicked: bridge.startScan()
                 }
                 MD.Button {
-                    text: "深度扫描"
-                    icon: "travel_explore"
+                    text: "AI分析"
+                    icon: "psychology"
                     type: "tonal"
                     enabled: bridge && !bridge.scanning
-                    onClicked: bridge.startScan(true)
+                    onClicked: bridge.startAiAnalysis()
+                }
+                MD.Button {
+                    text: "导出报告"
+                    icon: "file_download"
+                    type: "outlined"
+                    enabled: bridge
+                    onClicked: {
+                        exportFormatCombo.currentText = bridge.defaultReportFormat
+                        reportPathField.text = ""
+                        exportPopup.open()
+                    }
                 }
             }
 
@@ -103,6 +243,7 @@ PageFrame {
                 text: bridge ? bridge.currentContent : ""
                 highlightedText: bridge ? bridge.currentHighlightedContent : ""
                 filePath: bridge ? bridge.currentFile : ""
+                targetLine: bridge ? bridge.currentLine : 0
             }
         }
     }

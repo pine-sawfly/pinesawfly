@@ -1,8 +1,8 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic as Controls
 import "../Styles" as Styles
 
-TextField {
+Controls.TextField {
     id: root
 
     property string label: ""

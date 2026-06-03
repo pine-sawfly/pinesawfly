@@ -8,6 +8,8 @@ Rectangle {
     property string highlightedText: ""
     property string filePath: ""
     property int targetLine: 0
+    property int flashLine: 0
+    property real flashOpacity: 0
     property string editorFontFamily: Styles.Fonts.monoFamily
     property real naturalContentWidth: codeText.implicitWidth + gutter.width + 20
     property real naturalContentHeight: codeText.implicitHeight + 8
@@ -20,6 +22,11 @@ Rectangle {
 
     onEditorFontFamilyChanged: {
         codeText.font.family = editorFontFamily
+    }
+
+    onTargetLineChanged: {
+        if (targetLine > 0)
+            jumpToLine(targetLine)
     }
 
     color: Styles.Theme.manager && Styles.Theme.manager.isDarkTheme ? "#111318" : "#FAF9FD"
@@ -45,6 +52,16 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
             flickDeceleration: 3500
             maximumFlickVelocity: 5200
+
+            Rectangle {
+                id: flashBackground
+                x: gutter.width
+                y: Math.max(0, root.flashLine - 1) * 20
+                width: Math.max(codeText.implicitWidth + 12, flick.width - gutter.width)
+                height: 20
+                visible: root.flashOpacity > 0 && root.flashLine > 0
+                color: Qt.rgba(244 / 255, 67 / 255, 54 / 255, root.flashOpacity)
+            }
 
             Row {
                 y: 0
@@ -172,6 +189,20 @@ Rectangle {
                 acceptedButtons: Qt.NoButton
             }
         }
+    }
+
+    SequentialAnimation {
+        id: flashAnimation
+        PropertyAction { target: root; property: "flashOpacity"; value: 0.28 }
+        NumberAnimation { target: root; property: "flashOpacity"; to: 0; duration: 750; easing.type: Easing.OutCubic }
+    }
+
+    function jumpToLine(line) {
+        var boundedLine = Math.max(1, Math.min(line, lines.length))
+        var targetY = (boundedLine - 1) * 20 - flick.height * 0.35
+        flick.contentY = Math.max(0, Math.min(Math.max(0, flick.contentHeight - flick.height), targetY))
+        root.flashLine = boundedLine
+        flashAnimation.restart()
     }
 
     property var lines: text.length ? text.split(/\r\n|\r|\n/) : [""]
