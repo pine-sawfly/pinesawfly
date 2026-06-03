@@ -12,6 +12,9 @@ Rectangle {
     property int currentIndex: 0
     property var bridge: auditBridge
     property real windowRadius: 0
+    property bool drawerCollapsed: false
+    property int drawerExpandedWidth: 272
+    property int drawerCollapsedWidth: 72
     property var pages: [
         { label: "首页", icon: "home", source: "pages/HomePage.qml" },
         { label: "组件", icon: "widgets", source: "pages/ComponentsPage.qml" },
@@ -33,10 +36,12 @@ Rectangle {
 
         Rectangle {
             id: drawer
-            width: 272
+            width: root.drawerCollapsed ? root.drawerCollapsedWidth : root.drawerExpandedWidth
             height: parent.height
             color: Styles.Theme.color.surfaceContainer
             radius: root.windowRadius
+
+            Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
             Rectangle {
                 anchors.right: parent.right
@@ -60,25 +65,46 @@ Rectangle {
                 spacing: 16
 
                 Row {
-                    spacing: 12
+                    width: parent.width
+                    spacing: root.drawerCollapsed ? 0 : 12
                     height: 48
 
                     Rectangle {
+                        id: drawerToggle
                         width: 42
                         height: 42
                         radius: 12
                         color: Styles.Theme.color.primary
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: "bug_report"
-                            font.family: Styles.Fonts.iconFamily
-                            font.pixelSize: 24
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
                             color: Styles.Theme.color.onPrimary
+                            opacity: logoMouse.containsMouse ? Styles.Theme.state.hover : 0
                         }
+
+                        MD.LogoIcon {
+                            anchors.centerIn: parent
+                            iconColor: Styles.Theme.color.onPrimary
+                            width: 26
+                            height: 26
+                        }
+
+                        MouseArea {
+                            id: logoMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.drawerCollapsed = !root.drawerCollapsed
+                        }
+
+                        ToolTip.visible: logoMouse.containsMouse
+                        ToolTip.text: root.drawerCollapsed ? "展开侧边栏" : "折叠侧边栏"
                     }
 
                     Column {
+                        visible: !root.drawerCollapsed
+                        opacity: root.drawerCollapsed ? 0 : 1
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
 
@@ -91,7 +117,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: "PHP 安全审计工作台"
+                            text: "WEB 安全审计工作台"
                             color: Styles.Theme.color.onSurfaceVariant
                             font.family: Styles.Theme.typography.family
                             font.pixelSize: 12
@@ -100,6 +126,8 @@ Rectangle {
                 }
 
                 MD.Button {
+                    visible: !root.drawerCollapsed
+                    opacity: root.drawerCollapsed ? 0 : 1
                     width: parent.width
                     text: "打开项目"
                     icon: "folder_open"
@@ -122,7 +150,7 @@ Rectangle {
                             Row {
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.left: parent.left
-                                anchors.leftMargin: 16
+                                anchors.leftMargin: root.drawerCollapsed ? (parent.width - implicitWidth) / 2 : 16
                                 spacing: 12
 
                                 Text {
@@ -133,6 +161,7 @@ Rectangle {
                                 }
 
                                 Text {
+                                    visible: !root.drawerCollapsed
                                     text: modelData.label
                                     font.family: Styles.Theme.typography.family
                                     font.pixelSize: 14
@@ -151,12 +180,14 @@ Rectangle {
                 }
 
                 Rectangle {
+                    visible: !root.drawerCollapsed
                     width: parent.width
                     height: 1
                     color: Styles.Theme.color.outlineVariant
                 }
 
                 Text {
+                    visible: !root.drawerCollapsed
                     text: root.bridge ? root.bridge.projectPath : ""
                     width: parent.width
                     wrapMode: Text.WrapAnywhere
@@ -166,6 +197,7 @@ Rectangle {
                 }
 
                 Text {
+                    visible: !root.drawerCollapsed
                     text: root.bridge ? root.bridge.status : ""
                     width: parent.width
                     wrapMode: Text.WordWrap

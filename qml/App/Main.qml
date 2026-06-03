@@ -47,30 +47,6 @@ Window {
             }
 
             Row {
-                anchors.left: parent.left
-                anchors.leftMargin: 14
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 10
-
-                Image {
-                    width: 24
-                    height: 24
-                    source: "../../assets/icons/app.ico"
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                }
-
-                Text {
-                    text: "PineSawFly"
-                    font.family: Styles.Theme.typography.family
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                    color: Styles.Theme.color.onSurface
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-
-            Row {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 height: parent.height

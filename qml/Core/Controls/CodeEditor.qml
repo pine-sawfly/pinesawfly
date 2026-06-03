@@ -9,6 +9,14 @@ Rectangle {
     property string filePath: ""
     property int targetLine: 0
     property string editorFontFamily: Styles.Fonts.monoFamily
+    property real naturalContentWidth: codeText.implicitWidth + gutter.width + 20
+    property real naturalContentHeight: codeText.implicitHeight + 8
+    property real baseViewportWidth: Math.max(1, width - 24)
+    property real baseViewportHeight: Math.max(1, height - 24)
+    property bool needsHorizontalScroll: naturalContentWidth > baseViewportWidth
+                                        || (naturalContentWidth > baseViewportWidth - 18 && naturalContentHeight > baseViewportHeight)
+    property bool needsVerticalScroll: naturalContentHeight > baseViewportHeight
+                                      || (naturalContentHeight > baseViewportHeight - 18 && naturalContentWidth > baseViewportWidth)
 
     onEditorFontFamilyChanged: {
         codeText.font.family = editorFontFamily
@@ -26,13 +34,13 @@ Rectangle {
             id: flick
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.right: verticalTrack.visible ? verticalTrack.left : parent.right
-            anchors.bottom: horizontalTrack.visible ? horizontalTrack.top : parent.bottom
+            anchors.right: root.needsVerticalScroll ? verticalTrack.left : parent.right
+            anchors.bottom: root.needsHorizontalScroll ? horizontalTrack.top : parent.bottom
             anchors.margins: 12
-            anchors.rightMargin: verticalTrack.visible ? 8 : 12
-            anchors.bottomMargin: horizontalTrack.visible ? 8 : 12
-            contentWidth: Math.max(width, codeText.implicitWidth + gutter.width + 20)
-            contentHeight: Math.max(height, codeText.implicitHeight + 8)
+            anchors.rightMargin: root.needsVerticalScroll ? 8 : 12
+            anchors.bottomMargin: root.needsHorizontalScroll ? 8 : 12
+            contentWidth: Math.max(width, root.naturalContentWidth)
+            contentHeight: Math.max(height, root.naturalContentHeight)
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             flickDeceleration: 3500
@@ -81,9 +89,9 @@ Rectangle {
             anchors.rightMargin: 4
             anchors.top: parent.top
             anchors.topMargin: 12
-            anchors.bottom: horizontalTrack.visible ? horizontalTrack.top : parent.bottom
-            anchors.bottomMargin: horizontalTrack.visible ? 8 : 12
-            visible: flick.contentHeight > flick.height
+            anchors.bottom: root.needsHorizontalScroll ? horizontalTrack.top : parent.bottom
+            anchors.bottomMargin: root.needsHorizontalScroll ? 8 : 12
+            visible: root.needsVerticalScroll
             color: Qt.rgba(0, 0, 0, verticalMouse.containsMouse || verticalDrag.active ? 0.08 : 0.03)
 
             Rectangle {
@@ -125,11 +133,11 @@ Rectangle {
             radius: 999
             anchors.left: parent.left
             anchors.leftMargin: 12
-            anchors.right: verticalTrack.visible ? verticalTrack.left : parent.right
-            anchors.rightMargin: verticalTrack.visible ? 8 : 12
+            anchors.right: root.needsVerticalScroll ? verticalTrack.left : parent.right
+            anchors.rightMargin: root.needsVerticalScroll ? 8 : 12
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 4
-            visible: flick.contentWidth > flick.width
+            visible: root.needsHorizontalScroll
             color: Qt.rgba(0, 0, 0, horizontalMouse.containsMouse || horizontalDrag.active ? 0.08 : 0.03)
 
             Rectangle {
