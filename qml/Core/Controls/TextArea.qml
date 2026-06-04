@@ -6,6 +6,7 @@ Controls.ScrollView {
     id: root
 
     property bool mono: false
+    property bool wrapText: true
     property alias text: editor.text
     property alias placeholderText: editor.placeholderText
     property alias cursorPosition: editor.cursorPosition
@@ -19,7 +20,7 @@ Controls.ScrollView {
     }
 
     clip: true
-    contentWidth: availableWidth
+    contentWidth: root.wrapText ? availableWidth : Math.max(availableWidth, editor.implicitWidth)
     contentHeight: Math.max(availableHeight, editor.implicitHeight)
 
     background: Rectangle {
@@ -32,7 +33,7 @@ Controls.ScrollView {
     Controls.TextArea {
         id: editor
 
-        width: root.availableWidth
+        width: root.wrapText ? root.availableWidth : Math.max(root.availableWidth, implicitWidth)
         height: Math.max(root.availableHeight, implicitHeight)
         color: Styles.Theme.color.onSurface
         placeholderTextColor: Styles.Theme.color.onSurfaceVariant
@@ -44,7 +45,7 @@ Controls.ScrollView {
         rightPadding: 20
         topPadding: 12
         bottomPadding: 12
-        wrapMode: TextEdit.Wrap
+        wrapMode: root.wrapText ? TextEdit.Wrap : TextEdit.NoWrap
 
         background: Item {}
     }
@@ -66,6 +67,28 @@ Controls.ScrollView {
             implicitWidth: 6
             radius: 999
             color: verticalBar.pressed || verticalBar.hovered
+                   ? Styles.Theme.color.primary
+                   : (Styles.Theme.manager && Styles.Theme.manager.isDarkTheme ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.28))
+        }
+    }
+
+    Controls.ScrollBar.horizontal: Controls.ScrollBar {
+        id: horizontalBar
+        policy: root.wrapText ? Controls.ScrollBar.AlwaysOff : Controls.ScrollBar.AsNeeded
+        height: 12
+        padding: 2
+
+        background: Rectangle {
+            radius: 999
+            color: horizontalBar.hovered || horizontalBar.pressed
+                   ? (Styles.Theme.manager && Styles.Theme.manager.isDarkTheme ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.07))
+                   : "transparent"
+        }
+
+        contentItem: Rectangle {
+            implicitHeight: 6
+            radius: 999
+            color: horizontalBar.pressed || horizontalBar.hovered
                    ? Styles.Theme.color.primary
                    : (Styles.Theme.manager && Styles.Theme.manager.isDarkTheme ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(0, 0, 0, 0.28))
         }

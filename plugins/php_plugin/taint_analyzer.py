@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class ValueState:
     tainted: bool = False
     suspicious_callable: bool = False
+    sql_template: bool = False
     sources: list[str] = field(default_factory=list)
     transforms: list[str] = field(default_factory=list)
 
@@ -26,6 +27,7 @@ class ValueState:
         return ValueState(
             tainted=self.tainted or other.tainted,
             suspicious_callable=self.suspicious_callable or other.suspicious_callable,
+            sql_template=self.sql_template or other.sql_template,
             sources=[*self.sources, *[source for source in other.sources if source not in self.sources]],
             transforms=[*self.transforms, *[item for item in other.transforms if item not in self.transforms]],
         )
@@ -37,6 +39,7 @@ class TaintAnalyzer:
         self.code_sinks = {"eval", "assert", "create_function"}
         self.command_sinks = {"system", "exec", "shell_exec", "passthru", "proc_open", "popen"}
         self.sql_sinks = {"mysql_query", "mysqli_query", "pg_query", "sqlite_query", "sqlite_exec"}
+        self.sql_methods = {"query", "exec"}
         self.file_sinks = {"include", "include_once", "require", "require_once"}
         self.callback_sinks = {"call_user_func", "call_user_func_array"}
         self.decode_functions = {
@@ -87,11 +90,24 @@ class TaintAnalyzer:
             state = self._eval_expr(right) if right else ValueState()
             variable = self._variable_key(left)
             if variable:
+                existing = self.variables.get(variable)
+                if (
+                    existing
+                    and existing.tainted
+                    and not state.tainted
+                    and not self._is_sanitizer_call(right)
+                    and not self._is_sql_variable(variable)
+                ):
+                    state = existing.merge(state)
                 self.variables[variable] = state
+                self._check_sql_assignment(node, variable, right, state)
             return state
 
         if node.type == "function_call_expression":
             return self._eval_function_call(node)
+
+        if node.type == "member_call_expression":
+            return self._eval_member_call(node)
 
         state = self._eval_expr(node)
         for child in node.children:
@@ -120,6 +136,20 @@ class TaintAnalyzer:
 
         if node.type == "function_call_expression":
             return self._eval_function_call(node)
+
+        if node.type == "member_call_expression":
+            return self._eval_member_call(node)
+
+        if self._is_string_node(node):
+            state = ValueState()
+            for child in node.children:
+                if child.is_named:
+                    state = state.merge(self._eval_expr(child))
+            if self._looks_like_sql(self._text(node)):
+                state.sql_template = True
+                if self._has_risky_dynamic_interpolation(node):
+                    state.transforms.append("dynamic-sql-template")
+            return state
 
         state = ValueState()
         for child in node.children:
@@ -174,6 +204,14 @@ class TaintAnalyzer:
 
         return argument_state
 
+    def _eval_member_call(self, node: Node) -> ValueState:
+        arguments = self._arguments(node)
+        method_name = self._member_method_name(node)
+        argument_state = self._merge_states(self._eval_expr(argument) for argument in arguments)
+        if method_name and method_name.lower() in self.sql_methods:
+            self._check_sql_sink(node, f"->{method_name}", argument_state)
+        return argument_state
+
     def _check_named_sink(self, node: Node, name: str, arguments: list[Node], argument_state: ValueState) -> None:
         if name in self.code_sinks and argument_state.tainted:
             self._add_result(
@@ -195,20 +233,8 @@ class TaintAnalyzer:
                 argument_state,
                 self._text(node),
             )
-        elif name in self.sql_sinks and argument_state.tainted:
-            escaped = any(transform in self.sql_escapers for transform in argument_state.transforms)
-            description = f"SQL 查询函数 {name} 的 SQL 参数来自 {', '.join(argument_state.sources) or '用户输入'}"
-            if escaped:
-                description += "；检测到转义函数处理，但拼接 SQL 仍应使用参数化查询，并确认数值上下文已加引号或强制类型转换"
-            self._add_result(
-                node,
-                "PHP_SQL_INJECTION_TAINT",
-                "用户输入进入 SQL 查询",
-                "High",
-                description,
-                argument_state,
-                self._text(node),
-            )
+        elif name in self.sql_sinks:
+            self._check_sql_sink(node, name, argument_state)
         elif name in self.file_sinks and argument_state.tainted:
             self._add_result(
                 node,
@@ -229,6 +255,44 @@ class TaintAnalyzer:
                 argument_state,
                 self._text(node),
             )
+
+    def _check_sql_assignment(self, node: Node, variable: str, right: Node | None, state: ValueState) -> None:
+        if not right or not state.sql_template:
+            return
+        if not state.tainted and "dynamic-sql-template" not in state.transforms:
+            return
+        escaped = any(transform in self.sql_escapers for transform in state.transforms)
+        source = ", ".join(state.sources) or "动态变量"
+        description = f"变量 {variable} 被赋值为包含 {source} 的动态 SQL 模板"
+        if escaped:
+            description += "；检测到转义函数处理，但 addslashes/mysql_real_escape_string 不能替代参数化查询，GBK 等编码场景仍可能绕过"
+        self._add_result(
+            node,
+            "PHP_SQL_INJECTION_TAINT",
+            "动态 SQL 模板包含用户输入",
+            "High",
+            description,
+            state,
+            self._text(node),
+        )
+
+    def _check_sql_sink(self, node: Node, name: str, argument_state: ValueState) -> None:
+        if not argument_state.tainted and "dynamic-sql-template" not in argument_state.transforms:
+            return
+        escaped = any(transform in self.sql_escapers for transform in argument_state.transforms)
+        source = ", ".join(argument_state.sources) or "动态 SQL"
+        description = f"SQL 查询函数 {name} 的 SQL 参数来自 {source}"
+        if escaped:
+            description += "；检测到转义函数处理，但拼接 SQL 仍应使用参数化查询，并确认数值上下文已加引号或强制类型转换"
+        self._add_result(
+            node,
+            "PHP_SQL_INJECTION_TAINT",
+            "用户输入进入 SQL 查询",
+            "High",
+            description,
+            argument_state,
+            self._text(node),
+        )
 
     def _check_callback_sink(self, node: Node, name: str, arguments: list[Node]) -> None:
         if not arguments:
@@ -314,7 +378,7 @@ class TaintAnalyzer:
         seen: set[tuple[object, ...]] = set()
         unique: list[dict[str, Any]] = []
         for result in results:
-            key = (result.get("rule_id"), result.get("line"), result.get("match"), result.get("description"))
+            key = (result.get("rule_id"), result.get("line"), result.get("match"))
             if key in seen:
                 continue
             seen.add(key)
@@ -347,6 +411,21 @@ class TaintAnalyzer:
             return self._text(node).lstrip("\\")
         return None
 
+    def _member_method_name(self, node: Node) -> str | None:
+        for child in node.children:
+            if child.type == "name":
+                return self._text(child)
+        return None
+
+    def _is_sanitizer_call(self, node: Node | None) -> bool:
+        if not node or node.type != "function_call_expression":
+            return False
+        function_name = self._function_name(self._child_by_field(node, "function"))
+        return bool(function_name and function_name.lower() in self.sanitizers)
+
+    def _is_sql_variable(self, variable: str) -> bool:
+        return variable.lower() in {"$sql", "$query"} or "sql" in variable.lower() or "query" in variable.lower()
+
     def _variable_key(self, node: Node | None) -> str | None:
         if node and node.type == "variable_name":
             return self._text(node)
@@ -360,6 +439,27 @@ class TaintAnalyzer:
         for state in states:
             merged = merged.merge(state)
         return merged
+
+    def _is_string_node(self, node: Node) -> bool:
+        return node.type in {"encapsed_string", "string", "string_literal"}
+
+    def _has_risky_dynamic_interpolation(self, node: Node) -> bool:
+        if node.type == "variable_name":
+            variable = self._text(node)
+            if variable in self.superglobals:
+                return True
+            state = self.variables.get(variable)
+            return state is None or state.tainted
+        if node.type in {"subscript_expression", "member_access_expression"}:
+            state = self._eval_expr(node)
+            if state.tainted:
+                return True
+            base = next((child for child in node.children if child.is_named), None)
+            return self._has_risky_dynamic_interpolation(base) if base else True
+        return any(child.is_named and self._has_risky_dynamic_interpolation(child) for child in node.children)
+
+    def _looks_like_sql(self, value: str) -> bool:
+        return bool(re.search(r"\b(select|insert|update|delete|replace|with)\b.+\b(from|into|set|where|values)\b", value, re.IGNORECASE | re.DOTALL))
 
     def _text(self, node: Node) -> str:
         return self.source[node.start_byte:node.end_byte].decode("utf-8", "replace")

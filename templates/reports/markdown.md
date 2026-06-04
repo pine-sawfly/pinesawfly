@@ -1,21 +1,28 @@
 # {{ title }}
 
-{{ logo }}
+{{ color_logo }}
 
-{{ author }}
+作者：{{ author }}
 
-{{ project_path }}
+单位：{{ unit }}
 
-{{ generated_at }}
+项目路径：{{ project_path }}
 
----
+生成时间：{{ generated_at }}
+
+-------------------------------------------
 
 {{ overview }}
 
-## 审计详情与发现
+## 审计发现
 
-{{ findings }}
+{{# findings }}
+### {{ finding_id }}
 
-{{ affected_locations }}
+- **规则 ID**: {{ rule_id }}
+- **风险等级**: {{ risk_level }}
+- **问题概述**: {{ issue_summary }}
 
-{{ highlighted_code_snippets }}
+{{ highlighted_code }}
+
+{{/ findings }}

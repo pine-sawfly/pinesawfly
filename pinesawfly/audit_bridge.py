@@ -4,13 +4,16 @@ import html
 import json
 import logging
 import os
+import re
 import subprocess
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, Property, QSettings, QThread, QUrl, Signal, Slot
-from PySide6.QtGui import QPageSize, QPdfWriter, QTextDocument
+from PySide6.QtCore import QObject, Property, QLineF, QRectF, QSettings, QSizeF, Qt, QThread, QUrl, Signal, Slot
+from PySide6.QtGui import QColor, QFont, QPageSize, QPainter, QPdfWriter, QTextDocument
+from PySide6.QtSvg import QSvgRenderer
 
 from modules.file_module import FileModule
 from modules.generic_rule_engine import GenericRuleEngine
@@ -50,15 +53,22 @@ SNIPPET_SCOPE_NODES = {
 }
 REPORT_SYMBOLS = [
     "{{ title }}",
-    "{{ logo }}",
+    "{{ color_logo }}",
+    "{{ mono_logo }}",
     "{{ author }}",
+    "{{ unit }}",
     "{{ project_path }}",
     "{{ generated_at }}",
     "{{ overview }}",
-    "{{ findings }}",
-    "{{ affected_locations }}",
-    "{{ highlighted_code_snippets }}",
+    "{{# findings }}",
+    "{{ finding_id }}",
+    "{{ rule_id }}",
+    "{{ risk_level }}",
+    "{{ issue_summary }}",
+    "{{ highlighted_code }}",
+    "{{/ findings }}",
 ]
+FINDING_LOOP_PATTERN = re.compile(r"{{#\s*findings\s*}}(.*?){{/\s*findings\s*}}", re.DOTALL)
 
 
 def normalize_path(path_or_url: str) -> str:
@@ -189,17 +199,16 @@ class AuditBridge(QObject):
         self._current_highlighted_content = self._highlight_code(self._current_content, "")
         self._status = "就绪"
         self._scanning = False
-        self._report_title = self._settings.value("report/title", "PineSawFly 审计报告", str)
+        self._report_title = self._settings.value("report/title", "Pinesawfly审计报告", str)
         self._report_author = self._settings.value("report/author", "", str)
+        self._report_unit = self._settings.value("report/unit", "", str)
         self._report_template_format = "Markdown"
         self._report_template_content = self._load_report_template(self._report_template_format)
         self._report_include_project_path = self._settings.value("report/includeProjectPath", True, bool)
         self._report_include_generated_at = self._settings.value("report/includeGeneratedAt", True, bool)
         self._report_include_summary = self._settings.value("report/includeSummary", True, bool)
         self._report_include_logo = self._settings.value("report/includeLogo", True, bool)
-        self._report_include_affected_location = self._settings.value("report/includeAffectedLocation", True, bool)
         self._report_include_code_snippet = self._settings.value("report/includeCodeSnippet", True, bool)
-        self._report_include_evidence = self._settings.value("report/includeEvidence", True, bool)
         self._thread: QThread | None = None
         self._worker: ScanWorker | None = None
         self.setProjectPath(self._project_path)
@@ -328,7 +337,7 @@ class AuditBridge(QObject):
 
     @Slot(str)
     def setReportTitle(self, value: str) -> None:
-        value = value.strip() or "PineSawFly 审计报告"
+        value = value.strip() or "Pinesawfly审计报告"
         if value != self._report_title:
             self._report_title = value
             self._settings.setValue("report/title", value)
@@ -340,6 +349,14 @@ class AuditBridge(QObject):
         if value != self._report_author:
             self._report_author = value
             self._settings.setValue("report/author", value)
+            self.reportSettingsChanged.emit()
+
+    @Slot(str)
+    def setReportUnit(self, value: str) -> None:
+        value = value.strip()
+        if value != self._report_unit:
+            self._report_unit = value
+            self._settings.setValue("report/unit", value)
             self.reportSettingsChanged.emit()
 
     @Slot(bool)
@@ -371,24 +388,10 @@ class AuditBridge(QObject):
             self.reportSettingsChanged.emit()
 
     @Slot(bool)
-    def setReportIncludeAffectedLocation(self, value: bool) -> None:
-        if value != self._report_include_affected_location:
-            self._report_include_affected_location = value
-            self._settings.setValue("report/includeAffectedLocation", value)
-            self.reportSettingsChanged.emit()
-
-    @Slot(bool)
     def setReportIncludeCodeSnippet(self, value: bool) -> None:
         if value != self._report_include_code_snippet:
             self._report_include_code_snippet = value
             self._settings.setValue("report/includeCodeSnippet", value)
-            self.reportSettingsChanged.emit()
-
-    @Slot(bool)
-    def setReportIncludeEvidence(self, value: bool) -> None:
-        if value != self._report_include_evidence:
-            self._report_include_evidence = value
-            self._settings.setValue("report/includeEvidence", value)
             self.reportSettingsChanged.emit()
 
     @Slot(str, result=str)
@@ -477,6 +480,12 @@ class AuditBridge(QObject):
     def set_report_author(self, value: str) -> None:
         self.setReportAuthor(value)
 
+    def get_report_unit(self) -> str:
+        return self._report_unit
+
+    def set_report_unit(self, value: str) -> None:
+        self.setReportUnit(value)
+
     def get_report_template_content(self) -> str:
         return self._report_template_content
 
@@ -507,23 +516,11 @@ class AuditBridge(QObject):
     def set_report_include_logo(self, value: bool) -> None:
         self.setReportIncludeLogo(value)
 
-    def get_report_include_affected_location(self) -> bool:
-        return self._report_include_affected_location
-
-    def set_report_include_affected_location(self, value: bool) -> None:
-        self.setReportIncludeAffectedLocation(value)
-
     def get_report_include_code_snippet(self) -> bool:
         return self._report_include_code_snippet
 
     def set_report_include_code_snippet(self, value: bool) -> None:
         self.setReportIncludeCodeSnippet(value)
-
-    def get_report_include_evidence(self) -> bool:
-        return self._report_include_evidence
-
-    def set_report_include_evidence(self, value: bool) -> None:
-        self.setReportIncludeEvidence(value)
 
     files = Property("QVariantList", get_files, notify=filesChanged)
     projectPath = Property(str, get_project_path, notify=projectPathChanged)
@@ -536,15 +533,14 @@ class AuditBridge(QObject):
     scanning = Property(bool, get_scanning, notify=scanningChanged)
     reportTitle = Property(str, get_report_title, set_report_title, notify=reportSettingsChanged)
     reportAuthor = Property(str, get_report_author, set_report_author, notify=reportSettingsChanged)
+    reportUnit = Property(str, get_report_unit, set_report_unit, notify=reportSettingsChanged)
     reportTemplateContent = Property(str, get_report_template_content, notify=reportSettingsChanged)
     reportTemplateSymbols = Property("QVariantList", get_report_template_symbols, constant=True)
     reportIncludeProjectPath = Property(bool, get_report_include_project_path, set_report_include_project_path, notify=reportSettingsChanged)
     reportIncludeGeneratedAt = Property(bool, get_report_include_generated_at, set_report_include_generated_at, notify=reportSettingsChanged)
     reportIncludeSummary = Property(bool, get_report_include_summary, set_report_include_summary, notify=reportSettingsChanged)
     reportIncludeLogo = Property(bool, get_report_include_logo, set_report_include_logo, notify=reportSettingsChanged)
-    reportIncludeAffectedLocation = Property(bool, get_report_include_affected_location, set_report_include_affected_location, notify=reportSettingsChanged)
     reportIncludeCodeSnippet = Property(bool, get_report_include_code_snippet, set_report_include_code_snippet, notify=reportSettingsChanged)
-    reportIncludeEvidence = Property(bool, get_report_include_evidence, set_report_include_evidence, notify=reportSettingsChanged)
 
     def _highlight_code(self, content: str, file_path: str) -> str:
         return highlight_code(content, file_path)
@@ -567,9 +563,85 @@ class AuditBridge(QObject):
     def _write_pdf_report(self, target: Path) -> None:
         writer = QPdfWriter(str(target))
         writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
-        document = QTextDocument()
-        document.setHtml(self._render_template("PDF"))
-        document.print_(writer)
+        writer.setResolution(96)
+
+        page_rect = QRectF(writer.pageLayout().paintRectPixels(writer.resolution()))
+        margin = 54.0
+        footer_height = 34.0
+        content_width = page_rect.width() - margin * 2
+        content_height = page_rect.height() - margin * 2 - footer_height
+
+        html_parts = self._split_pdf_pages(self._render_template("PDF"))
+        documents = []
+        for html_part in html_parts:
+            document = QTextDocument()
+            document.setHtml(html_part)
+            document.setPageSize(QSizeF(content_width, content_height))
+            page_count = max(1, int((document.size().height() + content_height - 1) // content_height))
+            documents.append((document, page_count))
+
+        total_pages = sum(page_count for _document, page_count in documents)
+        current_page = 0
+        painter = QPainter(writer)
+        try:
+            for document, page_count in documents:
+                for page in range(page_count):
+                    if current_page > 0:
+                        writer.newPage()
+                    current_page += 1
+                    painter.save()
+                    painter.translate(margin, margin - page * content_height)
+                    document.drawContents(painter, QRectF(0, page * content_height, content_width, content_height))
+                    painter.restore()
+                    self._draw_pdf_footer(painter, page_rect, margin, current_page, total_pages)
+        finally:
+            painter.end()
+
+    def _split_pdf_pages(self, html_text: str) -> list[str]:
+        marker = '<div class="page-break"></div>'
+        if marker not in html_text:
+            return [html_text]
+
+        body_match = re.search(r"<body[^>]*>", html_text, re.IGNORECASE)
+        if body_match is None:
+            return [part for part in html_text.split(marker) if part.strip()]
+
+        head = html_text[:body_match.end()]
+        parts = html_text.split(marker)
+        documents: list[str] = []
+        for index, part in enumerate(parts):
+            if not part.strip():
+                continue
+            if index == 0:
+                documents.append(part + "</body></html>")
+            else:
+                documents.append(head + part)
+        return documents
+
+    def _draw_pdf_footer(self, painter: QPainter, page_rect: QRectF, margin: float, page: int, page_count: int) -> None:
+        footer_y = page_rect.bottom() - margin + 14
+        painter.save()
+        painter.setPen(QColor("#8a938d"))
+        painter.setFont(QFont("Microsoft YaHei", 8))
+        painter.drawLine(QLineF(margin, footer_y - 12, page_rect.width() - margin, footer_y - 12))
+
+        logo_path = self._mono_logo_path()
+        if logo_path is not None:
+            renderer = QSvgRenderer(str(logo_path))
+            if renderer.isValid():
+                renderer.render(painter, QRectF(margin, footer_y - 9, 18, 18))
+
+        painter.drawText(
+            QRectF(margin, footer_y - 8, page_rect.width() - margin * 2, 20),
+            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter),
+            "PineSawFly 版权所有",
+        )
+        painter.drawText(
+            QRectF(page_rect.width() - margin - 120, footer_y - 8, 120, 20),
+            int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+            f"第 {page} / {page_count} 页",
+        )
+        painter.restore()
 
     def _report_template_path(self, report_format: str) -> Path:
         return self._report_template_dir / {"Markdown": "markdown.md", "HTML": "html.html", "PDF": "pdf.html"}.get(report_format, "markdown.md")
@@ -588,13 +660,41 @@ class AuditBridge(QObject):
             return (
                 "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>{{ title }}</title></head><body>"
                 "<h1>{{ title }}</h1>{{ logo }}<p>{{ author }}</p><p>{{ project_path }}</p><p>{{ generated_at }}</p>"
-                "{{ overview }}<h2>审计发现</h2>{{ findings }}{{ affected_locations }}{{ highlighted_code_snippets }}</body></html>"
+                "{{ overview }}<h2>审计发现</h2>{{ findings }}</body></html>"
             )
-        return "# {{ title }}\n\n{{ logo }}\n\n{{ author }}\n\n{{ project_path }}\n\n{{ generated_at }}\n\n{{ overview }}\n\n## 审计发现\n\n{{ findings }}\n\n{{ affected_locations }}\n\n{{ highlighted_code_snippets }}\n"
+        return "# {{ title }}\n\n{{ logo }}\n\n{{ author }}\n\n{{ project_path }}\n\n{{ generated_at }}\n\n{{ overview }}\n\n## 审计发现\n\n{{ findings }}\n"
+
+    def _default_report_template(self, report_format: str) -> str:
+        if report_format in {"HTML", "PDF"}:
+            return (
+                '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{ title }}</title></head><body>'
+                "<h1>{{ title }}</h1>{{ color_logo }}<p>{{ author }}</p><p>{{ unit }}</p><p>{{ project_path }}</p><p>{{ generated_at }}</p>"
+                "{{ overview }}<h2>审计发现</h2>{{# findings }}<h3>{{ finding_id }}</h3>"
+                "<p>{{ rule_id }} / {{ risk_level }}</p><p>{{ issue_summary }}</p>{{ highlighted_code }}{{/ findings }}</body></html>"
+            )
+        return (
+            "# {{ title }}\n\n"
+            "{{ color_logo }}\n\n"
+            "{{ author }}\n\n"
+            "{{ unit }}\n\n"
+            "{{ project_path }}\n\n"
+            "{{ generated_at }}\n\n"
+            "{{ overview }}\n\n"
+            "## 审计发现\n\n"
+            "{{# findings }}\n"
+            "### {{ finding_id }}\n\n"
+            "- **规则 ID**: {{ rule_id }}\n"
+            "- **风险等级**: {{ risk_level }}\n"
+            "- **问题概述**: {{ issue_summary }}\n\n"
+            "{{ highlighted_code }}\n\n"
+            "{{/ findings }}\n"
+        )
 
     def _render_template(self, report_format: str) -> str:
         template = self._load_report_template(report_format)
-        values = self._template_values(report_format in {"HTML", "PDF"})
+        html_mode = report_format in {"HTML", "PDF"}
+        template = self._render_finding_loops(template, html_mode)
+        values = self._template_values(html_mode, report_format)
         for symbol, value in values.items():
             template = template.replace(symbol, value)
         return template
@@ -602,6 +702,8 @@ class AuditBridge(QObject):
     def _report_payload(self) -> dict[str, object]:
         return {
             "title": self._report_title,
+            "author": self._report_author,
+            "unit": self._report_unit,
             "projectPath": self._project_path,
             "generatedAt": datetime.now().isoformat(timespec="seconds"),
             "summary": self._report_summary(),
@@ -615,46 +717,97 @@ class AuditBridge(QObject):
             severity_count[severity] = severity_count.get(severity, 0) + 1
         return {"total": len(self._findings), "severityCount": severity_count}
 
-    def _template_values(self, html_mode: bool) -> dict[str, str]:
+    def _template_values(self, html_mode: bool, report_format: str = "HTML") -> dict[str, str]:
         payload = self._report_payload()
+        pdf_mode = report_format == "PDF"
         return {
             "{{ title }}": html.escape(str(payload["title"])) if html_mode else str(payload["title"]),
-            "{{ logo }}": self._render_logo(html_mode),
+            "{{ logo }}": self._render_logo(html_mode, pdf_mode),
+            "{{ color_logo }}": self._render_logo(html_mode, pdf_mode),
+            "{{ mono_logo }}": self._render_mono_logo(html_mode),
             "{{ author }}": self._render_author(html_mode),
+            "{{ author_value }}": html.escape(self._report_author) if html_mode else self._report_author,
+            "{{ unit }}": self._render_unit(html_mode),
+            "{{ unit_value }}": html.escape(self._report_unit) if html_mode else self._report_unit,
             "{{ project_path }}": self._render_project_path(html_mode, str(payload["projectPath"])),
             "{{ generated_at }}": self._render_generated_at(html_mode, str(payload["generatedAt"])),
+            "{{ generated_at_value }}": html.escape(str(payload["generatedAt"])) if html_mode else str(payload["generatedAt"]),
             "{{ overview }}": self._render_overview(html_mode, payload["summary"]),
             "{{ findings }}": self._render_findings(html_mode),
-            "{{ affected_locations }}": self._render_affected_locations(html_mode),
+            "{{ affected_locations }}": "",
             "{{ highlighted_code_snippets }}": self._render_code_snippets(html_mode),
         }
 
-    def _render_logo(self, html_mode: bool) -> str:
+    def _render_logo(self, html_mode: bool, pdf_mode: bool = False) -> str:
         if not self._report_include_logo:
             return ""
-        logo = self._app_root / "assets" / "icons" / "app.svg"
-        if not logo.exists():
-            logo = self._app_root / "assets" / "icons" / "app.ico"
-        if not logo.exists():
+        logo = self._color_logo_path()
+        if logo is None:
             return ""
-        logo_url = QUrl.fromLocalFile(str(logo)).toString()
-        return f'<img class="logo" src="{html.escape(logo_url)}" alt="PineSawFly Logo">' if html_mode else f"![PineSawFly Logo]({logo.as_posix()})"
+        logo_url = self._image_src(logo) if html_mode else logo.as_posix()
+        if html_mode:
+            if pdf_mode:
+                return f'<img class="logo" src="{html.escape(logo_url)}" alt="PineSawFly Logo" width="160" style="width:160px;height:auto;">'
+            return f'<img class="logo" src="{html.escape(logo_url)}" alt="PineSawFly Logo" style="width:25%;height:auto;">'
+        return f'<img src="{logo.as_posix()}" alt="PineSawFly Logo" width="25%">'
+
+    def _render_mono_logo(self, html_mode: bool) -> str:
+        if not self._report_include_logo:
+            return ""
+        logo = self._mono_logo_path()
+        if logo is None:
+            return ""
+        logo_url = self._image_src(logo) if html_mode else logo.as_posix()
+        if html_mode:
+            return f'<img class="mono-logo" src="{html.escape(logo_url)}" alt="PineSawFly Logo">'
+        return f'<img src="{logo.as_posix()}" alt="PineSawFly Logo">'
+
+    def _image_src(self, image_path: Path) -> str:
+        mime_type = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+            ".ico": "image/x-icon",
+        }.get(image_path.suffix.lower(), "application/octet-stream")
+        try:
+            encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+            return f"data:{mime_type};base64,{encoded}"
+        except OSError:
+            return QUrl.fromLocalFile(str(image_path)).toString()
+
+    def _color_logo_path(self) -> Path | None:
+        candidates = [
+            self._app_root / "assets" / "icons" / "app.jpg",
+            self._app_root / "assets" / "icons" / "app.ico",
+            self._app_root / "assets" / "icons" / "app.png",
+            self._app_root / "assets" / "icons" / "app.svg",
+        ]
+        return next((item for item in candidates if item.exists()), None)
+
+    def _mono_logo_path(self) -> Path | None:
+        logo = self._app_root / "assets" / "icons" / "app.svg"
+        return logo if logo.exists() else None
 
     def _render_author(self, html_mode: bool) -> str:
         if not self._report_author:
             return ""
-        return self._metadata_span("作者", self._report_author, html_mode)
+        return html.escape(self._report_author) if html_mode else self._report_author
+
+    def _render_unit(self, html_mode: bool) -> str:
+        if not self._report_unit:
+            return ""
+        return html.escape(self._report_unit) if html_mode else self._report_unit
 
     def _render_project_path(self, html_mode: bool, project_path: str) -> str:
         if not self._report_include_project_path:
             return ""
-        return self._metadata_span("项目路径", project_path, html_mode)
+        return html.escape(project_path) if html_mode else project_path
 
     def _render_generated_at(self, html_mode: bool, generated_at: str) -> str:
         if not self._report_include_generated_at:
             return ""
-        return self._metadata_span("生成时间", generated_at, html_mode)
-
+        return html.escape(generated_at) if html_mode else generated_at
     def _metadata_span(self, label: str, value: str, html_mode: bool) -> str:
         if html_mode:
             return (
@@ -688,61 +841,70 @@ class AuditBridge(QObject):
     def _render_findings(self, html_mode: bool) -> str:
         if not self._findings:
             return '<p class="empty">未发现问题。</p>' if html_mode else "未发现问题。"
-        if html_mode:
-            return "".join(self._render_finding_card(index, finding) for index, finding in enumerate(self._findings, 1))
-        lines: list[str] = []
-        for index, finding in enumerate(self._findings, 1):
-            evidence = self._finding_evidence(finding)
-            lines.extend([
-                f"### Finding {index:03d}: {finding.get('ruleName', '未知规则')}",
-                "",
-                f"- **规则 ID**: {finding.get('ruleId', '未知')}",
-                f"- **风险等级**: {finding.get('severity', '未知')}",
-                f"- **受影响位置**: {finding.get('file', '')}:{finding.get('line', 0)}",
-                f"- **问题描述**: {finding.get('description', '')}",
-            ])
-            if self._report_include_evidence and evidence:
-                lines.extend(["", "**匹配证据**", "", "```", evidence, "```"])
-            lines.append("")
-        return "\n".join(lines)
+        block = self._default_finding_block(html_mode)
+        return self._render_finding_loop_block(block, html_mode)
 
     def _render_finding_card(self, index: int, finding: dict[str, object]) -> str:
-        severity = str(finding.get("severity", "未知"))
-        location = f"{finding.get('file', '')}:{finding.get('line', 0)}"
-        evidence = self._finding_evidence(finding)
-        evidence_block = ""
-        if self._report_include_evidence and evidence:
-            evidence_block = f'<div class="finding-section"><h3>匹配证据</h3><pre>{html.escape(evidence)}</pre></div>'
-        return (
-            f'<article class="finding risk-{self._severity_class(severity)}">'
-            '<div class="finding-header">'
-            f'<div><div class="finding-kicker">Finding {index:03d}</div>'
-            f'<h2>{html.escape(str(finding.get("ruleName", "未知规则")))}</h2></div>'
-            f'<span class="risk-tag">{html.escape(severity)}</span>'
-            "</div>"
-            '<div class="finding-body">'
-            '<dl class="finding-meta">'
-            f'<div><dt>规则 ID</dt><dd>{html.escape(str(finding.get("ruleId", "未知")))}</dd></div>'
-            f'<div><dt>受影响位置</dt><dd>{html.escape(location)}</dd></div>'
-            "</dl>"
-            f'<div class="finding-section"><h3>问题描述</h3><p>{html.escape(str(finding.get("description", "")))}</p></div>'
-            f"{evidence_block}"
-            "</div>"
-            "</article>"
+        return self._render_finding_block(self._default_finding_block(html_mode), index, finding, html_mode)
+
+    def _render_finding_loops(self, template: str, html_mode: bool) -> str:
+        def replace(match: re.Match[str]) -> str:
+            return self._render_finding_loop_block(match.group(1), html_mode)
+
+        return FINDING_LOOP_PATTERN.sub(replace, template)
+
+    def _render_finding_loop_block(self, block: str, html_mode: bool) -> str:
+        if not self._findings:
+            return '<p class="empty">未发现问题。</p>' if html_mode else "未发现问题。"
+        return "\n".join(
+            self._render_finding_block(block, index, finding, html_mode)
+            for index, finding in enumerate(self._findings, 1)
         )
 
-    def _render_affected_locations(self, html_mode: bool) -> str:
-        if not self._report_include_affected_location or not self._findings:
-            return ""
+    def _render_finding_block(self, block: str, index: int, finding: dict[str, object], html_mode: bool) -> str:
+        rendered = block
+        for symbol, value in self._finding_template_values(index, finding, html_mode).items():
+            rendered = rendered.replace(symbol, value)
+        return rendered
+
+    def _finding_template_values(self, index: int, finding: dict[str, object], html_mode: bool) -> dict[str, str]:
+        values = {
+            "{{ finding_id }}": f"Finding {index:03d}",
+            "{{ rule_id }}": str(finding.get("ruleId", "未知")),
+            "{{ risk_level }}": str(finding.get("severity", "未知")),
+            "{{ risk_class }}": self._severity_class(str(finding.get("severity", "未知"))),
+            "{{ issue_summary }}": str(finding.get("description", "")),
+            "{{ highlighted_code }}": self._code_snippet(index, finding, html_mode) if self._report_include_code_snippet else "",
+        }
         if html_mode:
-            items = "".join(
-                f"<li>{html.escape(str(finding.get('file', '')))}:{html.escape(str(finding.get('line', 0)))}</li>"
-                for finding in self._findings
+            return {symbol: value if symbol == "{{ highlighted_code }}" else html.escape(value) for symbol, value in values.items()}
+        return values
+
+    def _default_finding_block(self, html_mode: bool) -> str:
+        if html_mode:
+            return (
+                '<article class="finding risk-{{ risk_class }}">'
+                '<div class="finding-header">'
+                '<div><h2>{{ finding_id }}</h2></div>'
+                '<span class="risk-tag">{{ risk_level }}</span>'
+                '</div>'
+                '<div class="finding-body">'
+                '<dl class="finding-meta">'
+                '<div><dt>规则 ID</dt><dd>{{ rule_id }}</dd></div>'
+                '<div><dt>风险等级</dt><dd>{{ risk_level }}</dd></div>'
+                '</dl>'
+                '<div class="finding-section"><h3>问题概述</h3><p>{{ issue_summary }}</p></div>'
+                '{{ highlighted_code }}'
+                '</div>'
+                '</article>'
             )
-            return f'<section class="affected"><h2>受影响代码位置</h2><ul>{items}</ul></section>'
-        lines = ["## 受影响代码位置", ""]
-        lines.extend(f"- {finding.get('file', '')}:{finding.get('line', 0)}" for finding in self._findings)
-        return "\n".join(lines)
+        return (
+            "### {{ finding_id }}\n\n"
+            "- **规则 ID**: {{ rule_id }}\n"
+            "- **风险等级**: {{ risk_level }}\n"
+            "- **问题概述**: {{ issue_summary }}\n\n"
+            "{{ highlighted_code }}\n"
+        )
 
     def _render_code_snippets(self, html_mode: bool) -> str:
         if not self._report_include_code_snippet or not self._findings:
@@ -767,18 +929,17 @@ class AuditBridge(QObject):
         start, end = self._snippet_range(path, lines, line)
         selected = [(number, lines[number - 1]) for number in range(start, end + 1)]
         language = self._snippet_language_name(path)
-        title = f"Finding {index:03d} - {finding.get('file', path.name)}:{line}"
         if html_mode:
             body = []
             for number, content in selected:
                 klass = ' class="hit"' if number == line else ""
                 body.append(f'<span{klass}><b>{number:>4}</b> {html.escape(content)}</span>')
-            return f'<div class="code-card"><h3>{html.escape(title)}</h3><pre>{"<br>".join(body)}</pre></div>'
+            return f'<div class="code-card"><pre>{"<br>".join(body)}</pre></div>'
         body = []
         for number, content in selected:
             marker = ">" if number == line else " "
             body.append(f"{marker} {number:>4}: {content}")
-        return f"### {title}\n\n```{language}\n" + "\n".join(body) + "\n```"
+        return f"```{language}\n" + "\n".join(body) + "\n```"
 
     def _snippet_range(self, path: Path, lines: list[str], line: int) -> tuple[int, int]:
         language = SNIPPET_LANGUAGES.get(path.suffix.lower())
@@ -823,25 +984,6 @@ class AuditBridge(QObject):
     def _fallback_snippet_range(self, lines: list[str], line: int) -> tuple[int, int]:
         return max(1, line - 3), min(len(lines), line + 3)
 
-    def _finding_evidence(self, finding: dict[str, object]) -> str:
-        source_line = self._finding_source_line(finding)
-        if source_line:
-            return source_line
-        return str(finding.get("match", "")).strip()
-
-    def _finding_source_line(self, finding: dict[str, object]) -> str:
-        path = Path(str(finding.get("absolutePath", "")))
-        line = int(finding.get("line") or 0)
-        if not path.exists() or line <= 0:
-            return ""
-        try:
-            lines = FileModule.read_file_with_encoding(path).splitlines()
-        except OSError:
-            return ""
-        if line > len(lines):
-            return ""
-        return lines[line - 1].rstrip()
-
     def _snippet_language_name(self, path: Path) -> str:
         return {
             ".php": "php",
@@ -880,13 +1022,10 @@ class AuditBridge(QObject):
                 lines.append(f"{severity}: {count}")
         lines.append("")
         for index, finding in enumerate(self._findings, 1):
-            lines.append(f"Finding {index:03d}: [{finding.get('severity', '未知')}] {finding.get('ruleName', '未知规则')}")
-            lines.append(f"  规则: {finding.get('ruleId', '未知')}")
-            lines.append(f"  位置: {finding.get('file', '')}:{finding.get('line', 0)}")
-            lines.append(f"  描述: {finding.get('description', '')}")
-            evidence = self._finding_evidence(finding)
-            if self._report_include_evidence and evidence:
-                lines.append(f"  证据: {evidence}")
+            lines.append(f"Finding {index:03d}")
+            lines.append(f"  规则 ID: {finding.get('ruleId', '未知')}")
+            lines.append(f"  风险等级: {finding.get('severity', '未知')}")
+            lines.append(f"  问题概述: {finding.get('description', '')}")
             lines.append("")
         if not self._findings:
             lines.append("未发现问题。")

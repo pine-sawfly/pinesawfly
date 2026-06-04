@@ -4,14 +4,17 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "报告"
-    subtitle: "通过模板和占位符控制导出报告的结构。"
-
     property var bridge: auditBridge
     property var templateFormatOptions: ["Markdown", "HTML", "PDF"]
 
     function loadTemplate(format) {
         if (bridge)
             templateEditor.text = bridge.loadReportTemplate(format)
+    }
+
+    function insertSelectedSymbol() {
+        if (symbolPicker.currentText.length > 0)
+            insertSymbol(symbolPicker.currentText)
     }
 
     function insertSymbol(symbol) {
@@ -23,7 +26,7 @@ PageFrame {
 
     MD.Card {
         width: parent.width
-        height: 238
+        height: 154
 
         Text {
             text: "报告信息"
@@ -35,11 +38,11 @@ PageFrame {
 
         Row {
             width: parent.width
-            spacing: 16
+            spacing: 12
 
             Column {
-                width: Math.min(460, parent.width * 0.48)
-                spacing: 8
+                width: Math.max(220, Math.min(340, (parent.width - 24) * 0.38))
+                spacing: 7
 
                 Text {
                     text: "报告标题"
@@ -50,15 +53,16 @@ PageFrame {
 
                 MD.TextField {
                     width: parent.width
+                    dense: true
                     text: bridge ? bridge.reportTitle : ""
-                    placeholderText: "PineSawFly 审计报告"
+                    placeholderText: "Pinesawfly审计报告"
                     onEditingFinished: if (bridge) bridge.setReportTitle(text)
                 }
             }
 
             Column {
-                width: Math.min(340, parent.width * 0.36)
-                spacing: 8
+                width: Math.max(160, Math.min(240, (parent.width - 24) * 0.28))
+                spacing: 7
 
                 Text {
                     text: "作者"
@@ -69,24 +73,32 @@ PageFrame {
 
                 MD.TextField {
                     width: parent.width
+                    dense: true
                     text: bridge ? bridge.reportAuthor : ""
                     placeholderText: "可选"
                     onEditingFinished: if (bridge) bridge.setReportAuthor(text)
                 }
             }
-        }
 
-        Flow {
-            width: parent.width
-            spacing: 10
+            Column {
+                width: Math.max(160, parent.width - 24 -  Math.max(220, Math.min(340, (parent.width - 24) * 0.38)) - Math.max(160, Math.min(240, (parent.width - 24) * 0.28)))
+                spacing: 7
 
-            MD.Checkbox { text: "项目路径"; checked: bridge ? bridge.reportIncludeProjectPath : true; onToggled: if (bridge) bridge.setReportIncludeProjectPath(checked) }
-            MD.Checkbox { text: "时间"; checked: bridge ? bridge.reportIncludeGeneratedAt : true; onToggled: if (bridge) bridge.setReportIncludeGeneratedAt(checked) }
-            MD.Checkbox { text: "概览"; checked: bridge ? bridge.reportIncludeSummary : true; onToggled: if (bridge) bridge.setReportIncludeSummary(checked) }
-            MD.Checkbox { text: "Logo"; checked: bridge ? bridge.reportIncludeLogo : true; onToggled: if (bridge) bridge.setReportIncludeLogo(checked) }
-            MD.Checkbox { text: "受影响位置"; checked: bridge ? bridge.reportIncludeAffectedLocation : true; onToggled: if (bridge) bridge.setReportIncludeAffectedLocation(checked) }
-            MD.Checkbox { text: "匹配证据"; checked: bridge ? bridge.reportIncludeEvidence : true; onToggled: if (bridge) bridge.setReportIncludeEvidence(checked) }
-            MD.Checkbox { text: "高亮代码片段"; checked: bridge ? bridge.reportIncludeCodeSnippet : true; onToggled: if (bridge) bridge.setReportIncludeCodeSnippet(checked) }
+                Text {
+                    text: "单位"
+                    font.family: Styles.Theme.typography.family
+                    font.pixelSize: 13
+                    color: Styles.Theme.color.onSurfaceVariant
+                }
+
+                MD.TextField {
+                    width: parent.width
+                    dense: true
+                    text: bridge ? bridge.reportUnit : ""
+                    placeholderText: "可选"
+                    onEditingFinished: if (bridge) bridge.setReportUnit(text)
+                }
+            }
         }
     }
 
@@ -126,18 +138,34 @@ PageFrame {
                     color: Styles.Theme.color.onSurfaceVariant
                 }
 
-                Flow {
+                Row {
                     width: parent.width
                     spacing: 8
 
-                    Repeater {
+                    MD.ComboBox {
+                        id: symbolPicker
+                        width: parent.width - insertSymbolButton.width - 8
+                        dense: true
                         model: bridge ? bridge.reportTemplateSymbols : []
-                        delegate: MD.Button {
-                            text: modelData
-                            type: "tonal"
-                            onClicked: insertSymbol(modelData)
-                        }
+                        currentText: bridge && bridge.reportTemplateSymbols.length > 0 ? bridge.reportTemplateSymbols[0] : ""
                     }
+
+                    MD.Button {
+                        id: insertSymbolButton
+                        text: "插入"
+                        icon: "add"
+                        type: "tonal"
+                        onClicked: insertSelectedSymbol()
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: "在 {{# findings }} 与 {{/ findings }} 之间排列发现字段，多个发现会按顺序重复这一块。"
+                    wrapMode: Text.WordWrap
+                    font.family: Styles.Theme.typography.family
+                    font.pixelSize: 12
+                    color: Styles.Theme.color.onSurfaceVariant
                 }
 
                 Row {
@@ -175,6 +203,7 @@ PageFrame {
                     width: parent.width
                     height: 490
                     mono: true
+                    wrapText: false
                     placeholderText: "在这里编辑报告模板，可以插入 {{ title }} 这类占位符。"
                 }
             }
