@@ -10,37 +10,53 @@
       "severity": "Critical",
       "description": "检测到eval或assert函数调用，可能导致代码注入",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP002",
       "name": "文件包含漏洞(include/require)",
       "type": "REGEX",
-      "pattern": "\\b(include|require)(_once){0,1}(\\s{1,5}|\\s{0,5}\\().{0,60}\\$(?!.*(this->))\\w{1,20}((\\[\"|\\[)\\${0,1}[\\w\\[\\]\"']{0,30}){0,1}",
+      "pattern": "\\b(include|require)(_once)?\\s*(\\(|\\s+)\\s*(\\$_(GET|POST|REQUEST|COOKIE|FILES|SERVER)|\\$\\w+\\s*\\[)",
       "severity": "High",
-      "description": "检测到include/require函数调用，可能存在文件包含漏洞",
+      "description": "检测到include/require直接使用请求变量或数组变量，可能存在文件包含漏洞；普通变量源头由污点分析判断",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP003",
-      "name": "命令执行函数(exec)",
+      "name": "命令执行函数(exec/shell_exec等)",
       "type": "REGEX",
-      "pattern": "\\bexec\\s*\\(",
+      "pattern": "\\b(exec|shell_exec|passthru|proc_open|popen)\\s*\\(\\s*(\\$|[\\\"'][^\\\"']*(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash))",
       "severity": "High",
-      "description": "检测到exec函数调用，可能导致命令执行",
+      "description": "检测到命令执行函数调用，参数为变量或包含可疑命令特征，可能导致命令执行",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP004",
       "name": "系统命令函数(system)",
       "type": "REGEX",
-      "pattern": "\\bsystem\\s*\\(",
+      "pattern": "\\bsystem\\s*\\(\\s*(\\$|[\\\"'][^\\\"']*(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash))",
       "severity": "High",
-      "description": "检测到system函数调用，可能导致命令执行",
+      "description": "检测到system函数调用，参数为变量或包含可疑命令特征，可能导致命令执行",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP005",
@@ -50,7 +66,11 @@
       "severity": "High",
       "description": "检测到unserialize函数调用，可能存在反序列化漏洞",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP006",
@@ -60,7 +80,11 @@
       "severity": "High",
       "description": "SQL语句select中条件变量无单引号保护，可能存在SQL注入漏洞",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP007",
@@ -70,7 +94,11 @@
       "severity": "Low",
       "description": "检测到phpinfo()，可能存在php版本信息泄露",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP008",
@@ -80,7 +108,11 @@
       "severity": "High",
       "description": "检测到call_user_func函数使用变量作为函数名，可能存在代码执行风险",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP009",
@@ -90,17 +122,25 @@
       "severity": "High",
       "description": "检测到变量覆盖漏洞，用户输入可能覆盖关键变量",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     },
     {
       "id": "PHP010",
       "name": "文件上传漏洞",
       "type": "REGEX",
-      "pattern": "\\bmove_uploaded_file\\s{0,5}\\(",
+      "pattern": "\\bmove_uploaded_file\\s*\\([^,]+,\\s*[^;\\n]*\\$_FILES\\s*\\[[^\\]]+\\]\\s*\\[[\"']name[\"']\\]",
       "severity": "High",
-      "description": "检测到move_uploaded_file函数调用，可能存在文件上传漏洞",
+      "description": "检测到上传文件保存路径直接使用原始文件名，可能存在危险文件上传或路径污染风险",
       "enabled": true,
-      "flags": []
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     }
   ]
 }

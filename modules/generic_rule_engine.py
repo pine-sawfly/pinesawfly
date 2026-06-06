@@ -48,6 +48,7 @@ class GenericRuleEngine:
             "severity": rule.get("severity", "Medium"),
             "description": rule.get("description", ""),
             "flags": rule.get("flags", []),
+            "skipContexts": rule.get("skipContexts", []),
         }
 
     def get_rules_by_language(self, language: str) -> list[dict[str, Any]]:
@@ -70,16 +71,23 @@ class GenericRuleEngine:
 
         content = FileModule.read_file_with_encoding(file_path)
         results: list[dict[str, Any]] = []
+        ignored_spans = self._ignored_spans(content, language)
         for rule in self.rules[language]:
             try:
-                results.extend(self._match_rule(content, rule, file_path))
+                results.extend(self._match_rule(content, rule, file_path, ignored_spans))
             except Exception as exc:
                 logger.error("应用规则 %s 时出错: %s", rule["id"], exc)
 
         logger.info("通用规则引擎在文件 %s 中发现 %s 个问题", file_path, len(results))
         return results
 
-    def _match_rule(self, content: str, rule: dict[str, Any], file_path: str) -> list[dict[str, Any]]:
+    def _match_rule(
+        self,
+        content: str,
+        rule: dict[str, Any],
+        file_path: str,
+        ignored_spans: list[tuple[int, int]],
+    ) -> list[dict[str, Any]]:
         if rule.get("type", "REGEX") != "REGEX":
             return []
 
@@ -91,6 +99,8 @@ class GenericRuleEngine:
 
         results = []
         for match in regex.finditer(content):
+            if self._should_skip_match(match.start(), rule, ignored_spans):
+                continue
             results.append({
                 "rule_id": rule["id"],
                 "rule_name": rule["name"],
@@ -101,6 +111,85 @@ class GenericRuleEngine:
                 "match": match.group(0),
             })
         return results
+
+    def _ignored_spans(self, content: str, language: str) -> list[tuple[int, int]]:
+        if language != "php":
+            return []
+        return self._php_ignored_spans(content)
+
+    def _should_skip_match(self, start: int, rule: dict[str, Any], ignored_spans: list[tuple[int, int]]) -> bool:
+        if not rule.get("skipContexts"):
+            return False
+        return any(span_start <= start < span_end for span_start, span_end in ignored_spans)
+
+    def _php_ignored_spans(self, content: str) -> list[tuple[int, int]]:
+        code_spans = self._php_code_spans(content)
+        if not code_spans:
+            return self._php_string_comment_spans(content, 0, len(content))
+
+        ignored: list[tuple[int, int]] = []
+        cursor = 0
+        for start, end in code_spans:
+            if cursor < start:
+                ignored.append((cursor, start))
+            ignored.extend(self._php_string_comment_spans(content, start, end))
+            cursor = end
+        if cursor < len(content):
+            ignored.append((cursor, len(content)))
+        return ignored
+
+    def _php_code_spans(self, content: str) -> list[tuple[int, int]]:
+        tag_pattern = re.compile(r"<\?(?:php|=)?", re.IGNORECASE)
+        spans: list[tuple[int, int]] = []
+        for match in tag_pattern.finditer(content):
+            start = match.end()
+            close = content.find("?>", start)
+            end = len(content) if close == -1 else close
+            spans.append((start, end))
+        return spans
+
+    def _php_string_comment_spans(self, content: str, start: int, end: int) -> list[tuple[int, int]]:
+        spans: list[tuple[int, int]] = []
+        i = start
+        while i < end:
+            char = content[i]
+            next_char = content[i + 1] if i + 1 < end else ""
+            if char in {"'", '"', "`"}:
+                span_start = i
+                quote = char
+                i += 1
+                while i < end:
+                    if content[i] == "\\":
+                        i += 2
+                        continue
+                    if content[i] == quote:
+                        i += 1
+                        break
+                    i += 1
+                spans.append((span_start, min(i, end)))
+                continue
+            if char == "/" and next_char == "/":
+                span_start = i
+                i = content.find("\n", i + 2)
+                if i == -1 or i > end:
+                    i = end
+                spans.append((span_start, i))
+                continue
+            if char == "#":
+                span_start = i
+                i = content.find("\n", i + 1)
+                if i == -1 or i > end:
+                    i = end
+                spans.append((span_start, i))
+                continue
+            if char == "/" and next_char == "*":
+                span_start = i
+                block_end = content.find("*/", i + 2)
+                i = end if block_end == -1 or block_end > end else block_end + 2
+                spans.append((span_start, i))
+                continue
+            i += 1
+        return spans
 
     def _regex_flags(self, flags: Any) -> int:
         if isinstance(flags, str):

@@ -47,17 +47,18 @@ class RuleManager(QObject):
             self._set_status(f"规则ID已存在: {rule_id}")
             return False
 
-        rules.append(
-            {
-                "id": rule_id.strip(),
-                "name": name.strip(),
-                "type": "REGEX",
-                "pattern": pattern,
-                "severity": severity.strip() or "Medium",
-                "description": description.strip(),
-                "enabled": True,
-            }
-        )
+        new_rule = {
+            "id": rule_id.strip(),
+            "name": name.strip(),
+            "type": "REGEX",
+            "pattern": pattern,
+            "severity": severity.strip() or "Medium",
+            "description": description.strip(),
+            "enabled": True,
+        }
+        if language == "php":
+            new_rule["skipContexts"] = ["string", "comment"]
+        rules.append(new_rule)
         self._write_rule_file(file_path, rules)
         self._set_status(f"已新增规则 {rule_id}")
         self.reload()
@@ -134,6 +135,7 @@ class RuleManager(QObject):
                 "description": description.strip(),
                 "enabled": bool(target_rule.get("enabled", True)),
                 "flags": target_rule.get("flags", []),
+                "skipContexts": target_rule.get("skipContexts", ["string", "comment"] if language == "php" else []),
             }
         )
         new_rules.append(target_rule)
@@ -208,6 +210,7 @@ class RuleManager(QObject):
             "severity": str(rule.get("severity", "Medium")),
             "description": str(rule.get("description", "")),
             "enabled": bool(rule.get("enabled", True)),
+            "skipContexts": list(rule.get("skipContexts", [])),
         }
 
     def _normalize_language(self, language: str) -> str:

@@ -20,16 +20,20 @@ class ValueState:
     tainted: bool = False
     suspicious_callable: bool = False
     sql_template: bool = False
+    upload_file_entry: bool = False
     sources: list[str] = field(default_factory=list)
     transforms: list[str] = field(default_factory=list)
+    literal_values: list[str] = field(default_factory=list)
 
     def merge(self, other: "ValueState") -> "ValueState":
         return ValueState(
             tainted=self.tainted or other.tainted,
             suspicious_callable=self.suspicious_callable or other.suspicious_callable,
             sql_template=self.sql_template or other.sql_template,
+            upload_file_entry=self.upload_file_entry or other.upload_file_entry,
             sources=[*self.sources, *[source for source in other.sources if source not in self.sources]],
             transforms=[*self.transforms, *[item for item in other.transforms if item not in self.transforms]],
+            literal_values=[*self.literal_values, *[value for value in other.literal_values if value not in self.literal_values]],
         )
 
 
@@ -39,9 +43,19 @@ class TaintAnalyzer:
         self.code_sinks = {"eval", "assert", "create_function"}
         self.command_sinks = {"system", "exec", "shell_exec", "passthru", "proc_open", "popen"}
         self.sql_sinks = {"mysql_query", "mysqli_query", "pg_query", "sqlite_query", "sqlite_exec"}
-        self.sql_methods = {"query", "exec"}
-        self.file_sinks = {"include", "include_once", "require", "require_once"}
-        self.callback_sinks = {"call_user_func", "call_user_func_array"}
+        self.sql_methods = {"query", "exec", "fetch", "fetchall"}
+        self.file_include_sinks = {"include", "include_once", "require", "require_once"}
+        self.file_read_sinks = {"file_get_contents", "readfile", "file", "fopen"}
+        self.file_sinks = self.file_include_sinks | self.file_read_sinks
+        self.callback_sinks = {
+            "call_user_func",
+            "call_user_func_array",
+            "register_shutdown_function",
+            "array_map",
+            "array_filter",
+            "array_walk",
+            "ob_start",
+        }
         self.decode_functions = {
             "base64_decode",
             "str_rot13",
@@ -55,6 +69,11 @@ class TaintAnalyzer:
         self.sanitizers = {"intval", "abs", "floatval", "boolval", "htmlspecialchars", "htmlentities", "filter_var"}
         self.sql_escapers = {"mysql_real_escape_string", "mysqli_real_escape_string", "addslashes"}
         self.dangerous_callable_names = self.code_sinks | self.command_sinks | {"preg_replace"}
+        self.suspicious_command_pattern = re.compile(
+            r"\b(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|whoami|id)\b|"
+            r"base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash|\be\s+/bin/",
+            re.IGNORECASE,
+        )
         self.variables: dict[str, ValueState] = {}
         self.results: list[dict[str, Any]] = []
         self.source = b""
@@ -90,6 +109,7 @@ class TaintAnalyzer:
             state = self._eval_expr(right) if right else ValueState()
             variable = self._variable_key(left)
             if variable:
+                self._mark_callable_state(state)
                 existing = self.variables.get(variable)
                 if (
                     existing
@@ -109,7 +129,10 @@ class TaintAnalyzer:
         if node.type == "member_call_expression":
             return self._eval_member_call(node)
 
-        state = self._eval_expr(node)
+        if node.type in {"include_expression", "include_once_expression", "require_expression", "require_once_expression"}:
+            return self._eval_include_expression(node)
+
+        state = ValueState()
         for child in node.children:
             if child.is_named:
                 state = state.merge(self._process_node(child))
@@ -126,6 +149,10 @@ class TaintAnalyzer:
             return self.variables.get(variable, ValueState())
 
         if node.type == "subscript_expression":
+            if self._is_uploaded_tmp_name_access(node):
+                return ValueState()
+            if self._is_files_entry_access(node):
+                return ValueState(tainted=True, upload_file_entry=True, sources=["$_FILES"])
             state = ValueState()
             for child in node.children:
                 state = state.merge(self._eval_expr(child))
@@ -141,7 +168,8 @@ class TaintAnalyzer:
             return self._eval_member_call(node)
 
         if self._is_string_node(node):
-            state = ValueState()
+            literal = self._literal_string(node)
+            state = ValueState(literal_values=[literal] if literal else [])
             for child in node.children:
                 if child.is_named:
                     state = state.merge(self._eval_expr(child))
@@ -150,6 +178,20 @@ class TaintAnalyzer:
                 if self._has_risky_dynamic_interpolation(node):
                     state.transforms.append("dynamic-sql-template")
             return state
+
+        if node.type == "binary_expression":
+            left = node.named_children[0] if node.named_child_count >= 1 else None
+            right = node.named_children[1] if node.named_child_count >= 2 else None
+            left_state = self._eval_expr(left)
+            right_state = self._eval_expr(right)
+            merged = left_state.merge(right_state)
+            concatenated = [
+                left_value + right_value
+                for left_value in left_state.literal_values
+                for right_value in right_state.literal_values
+            ]
+            merged.literal_values = [*merged.literal_values, *[value for value in concatenated if value not in merged.literal_values]]
+            return merged
 
         state = ValueState()
         for child in node.children:
@@ -190,6 +232,16 @@ class TaintAnalyzer:
                     callable_state.merge(argument_state),
                     self._text(node),
                 )
+            elif callable_state.suspicious_callable and self._has_suspicious_command(argument_state):
+                self._add_result(
+                    node,
+                    "PHP_DYNAMIC_BACKDOOR",
+                    "可疑动态函数后门",
+                    "Critical",
+                    f"变量 {callable_name} 由可疑 callable 赋值后调用，参数包含下载执行、反连或混淆解码特征",
+                    callable_state.merge(argument_state),
+                    self._text(node),
+                )
             elif argument_state.tainted:
                 self._add_result(
                     node,
@@ -209,8 +261,24 @@ class TaintAnalyzer:
         method_name = self._member_method_name(node)
         argument_state = self._merge_states(self._eval_expr(argument) for argument in arguments)
         if method_name and method_name.lower() in self.sql_methods:
-            self._check_sql_sink(node, f"->{method_name}", argument_state)
+            self._check_sql_sink(node, f"->{method_name}", argument_state, arguments)
+            return ValueState()
         return argument_state
+
+    def _eval_include_expression(self, node: Node) -> ValueState:
+        expression = next((child for child in node.children if child.is_named), None)
+        state = self._eval_expr(expression)
+        if state.tainted:
+            self._add_result(
+                node,
+                "PHP_FILE_INCLUDE_TAINT",
+                "用户输入进入文件包含函数",
+                "High",
+                f"文件包含表达式 {node.type.replace('_expression', '')} 的路径参数来自用户输入",
+                state,
+                self._text(node),
+            )
+        return state
 
     def _check_named_sink(self, node: Node, name: str, arguments: list[Node], argument_state: ValueState) -> None:
         if name in self.code_sinks and argument_state.tainted:
@@ -233,18 +301,28 @@ class TaintAnalyzer:
                 argument_state,
                 self._text(node),
             )
-        elif name in self.sql_sinks:
-            self._check_sql_sink(node, name, argument_state)
-        elif name in self.file_sinks and argument_state.tainted:
+        elif name in self.command_sinks and self._has_suspicious_command(argument_state):
             self._add_result(
                 node,
-                "PHP_FILE_INCLUDE_TAINT",
-                "用户输入进入文件包含函数",
-                "High",
-                f"文件包含函数 {name} 的路径参数来自用户输入",
+                "PHP_COMMAND_EXEC_SUSPICIOUS",
+                "命令执行函数运行可疑命令",
+                "Critical",
+                f"命令执行函数 {name} 的参数包含下载执行、反连或混淆解码特征",
                 argument_state,
                 self._text(node),
             )
+        elif name in self.sql_sinks:
+            self._check_sql_sink(node, name, argument_state, arguments)
+            return
+        elif name in self.file_sinks and argument_state.tainted:
+            rule_id = "PHP_FILE_INCLUDE_TAINT" if name in self.file_include_sinks else "PHP_FILE_READ_TAINT"
+            rule_name = "用户输入进入文件包含函数" if name in self.file_include_sinks else "用户输入进入文件读取函数"
+            description = (
+                f"文件包含函数 {name} 的路径参数来自用户输入"
+                if name in self.file_include_sinks
+                else f"文件读取函数 {name} 的路径参数来自用户输入"
+            )
+            self._add_result(node, rule_id, rule_name, "High", description, argument_state, self._text(node))
         elif name == "preg_replace" and self._is_preg_replace_eval(arguments) and argument_state.tainted:
             self._add_result(
                 node,
@@ -252,6 +330,16 @@ class TaintAnalyzer:
                 "preg_replace /e 代码执行",
                 "Critical",
                 "preg_replace 使用 /e 修饰符且参数包含用户输入",
+                argument_state,
+                self._text(node),
+            )
+        elif name == "preg_replace" and self._is_preg_replace_eval(arguments) and self._has_suspicious_command(argument_state):
+            self._add_result(
+                node,
+                "PHP_PREG_REPLACE_E_SUSPICIOUS",
+                "preg_replace /e 执行可疑命令",
+                "Critical",
+                "preg_replace 使用 /e 修饰符，替换表达式包含可疑命令执行特征",
                 argument_state,
                 self._text(node),
             )
@@ -276,7 +364,9 @@ class TaintAnalyzer:
             self._text(node),
         )
 
-    def _check_sql_sink(self, node: Node, name: str, argument_state: ValueState) -> None:
+    def _check_sql_sink(self, node: Node, name: str, argument_state: ValueState, arguments: list[Node]) -> None:
+        if self._is_parameterized_query(arguments):
+            return
         if not argument_state.tainted and "dynamic-sql-template" not in argument_state.transforms:
             return
         escaped = any(transform in self.sql_escapers for transform in argument_state.transforms)
@@ -294,6 +384,14 @@ class TaintAnalyzer:
             self._text(node),
         )
 
+    def _is_parameterized_query(self, arguments: list[Node]) -> bool:
+        if len(arguments) < 2:
+            return False
+        sql = self._literal_string(arguments[0]) or ""
+        if not sql:
+            return False
+        return "?" in sql or bool(re.search(r":[A-Za-z_][A-Za-z0-9_]*", sql))
+
     def _check_callback_sink(self, node: Node, name: str, arguments: list[Node]) -> None:
         if not arguments:
             return
@@ -301,6 +399,17 @@ class TaintAnalyzer:
         callback_state = self._eval_expr(arguments[0])
         rest_state = self._merge_states(self._eval_expr(argument) for argument in arguments[1:])
         dangerous = bool(callback and callback.lower() in self.dangerous_callable_names)
+        if dangerous and name == "ob_start":
+            self._add_result(
+                node,
+                "PHP_CALLBACK_SUSPICIOUS_COMMAND",
+                "危险输出缓冲回调",
+                "Critical",
+                f"ob_start 注册危险回调 {callback}，后续输出会进入命令/代码执行函数",
+                callback_state.merge(rest_state),
+                self._text(node),
+            )
+            return
         if (dangerous or callback_state.suspicious_callable) and rest_state.tainted:
             self._add_result(
                 node,
@@ -308,6 +417,16 @@ class TaintAnalyzer:
                 "用户输入进入危险回调",
                 "Critical",
                 f"{name} 调用危险回调 {callback or '动态回调'}，参数来自用户输入",
+                callback_state.merge(rest_state),
+                self._text(node),
+            )
+        elif (dangerous or callback_state.suspicious_callable) and self._has_suspicious_command(rest_state):
+            self._add_result(
+                node,
+                "PHP_CALLBACK_SUSPICIOUS_COMMAND",
+                "危险回调运行可疑命令",
+                "Critical",
+                f"{name} 调用危险回调 {callback or '动态回调'}，参数包含可疑命令特征",
                 callback_state.merge(rest_state),
                 self._text(node),
             )
@@ -321,6 +440,7 @@ class TaintAnalyzer:
             suspicious_callable=bool(decoded) or argument_state.suspicious_callable,
             sources=argument_state.sources,
             transforms=[*argument_state.transforms, *transforms, *[f"dangerous:{value}" for value in dangerous]],
+            literal_values=[*argument_state.literal_values, *decoded],
         )
 
     def _decoded_literals(self, decoder: str, node: Node) -> list[str]:
@@ -351,6 +471,13 @@ class TaintAnalyzer:
             except ValueError:
                 pass
         return [value for value in values if value]
+
+    def _has_suspicious_command(self, state: ValueState) -> bool:
+        return any(self.suspicious_command_pattern.search(value) for value in state.literal_values + state.transforms)
+
+    def _mark_callable_state(self, state: ValueState) -> None:
+        if any(value.lower().lstrip("\\") in self.dangerous_callable_names for value in state.literal_values):
+            state.suspicious_callable = True
 
     def _is_preg_replace_eval(self, arguments: list[Node]) -> bool:
         if not arguments:
@@ -403,6 +530,32 @@ class TaintAnalyzer:
         if node.type == "argument" and node.named_child_count:
             return self._literal_string(node.named_children[0])
         return None
+
+    def _is_uploaded_tmp_name_access(self, node: Node) -> bool:
+        if node.type != "subscript_expression":
+            return False
+        key = self._subscript_key(node)
+        if key != "tmp_name":
+            return False
+        base = self._subscript_base(node)
+        if not base:
+            return False
+        if "$_FILES" in self._text(base):
+            return True
+        if base.type == "variable_name":
+            return self.variables.get(self._text(base), ValueState()).upload_file_entry
+        return self._eval_expr(base).upload_file_entry
+
+    def _is_files_entry_access(self, node: Node) -> bool:
+        base = self._subscript_base(node)
+        return bool(base and base.type == "variable_name" and self._text(base) == "$_FILES" and self._subscript_key(node) != "tmp_name")
+
+    def _subscript_base(self, node: Node) -> Node | None:
+        return next((child for child in node.children if child.is_named and child.type != "string"), None)
+
+    def _subscript_key(self, node: Node) -> str | None:
+        strings = [child for child in node.children if child.is_named and self._is_string_node(child)]
+        return self._literal_string(strings[-1]) if strings else None
 
     def _function_name(self, node: Node | None) -> str | None:
         if not node:

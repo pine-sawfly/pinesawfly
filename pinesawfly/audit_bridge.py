@@ -634,7 +634,7 @@ class AuditBridge(QObject):
         painter.drawText(
             QRectF(margin, footer_y - 8, page_rect.width() - margin * 2, 20),
             int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter),
-            "PineSawFly 版权所有",
+            "Copyright © PineSawFly",
         )
         painter.drawText(
             QRectF(page_rect.width() - margin - 120, footer_y - 8, 120, 20),
