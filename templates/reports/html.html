@@ -5,264 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }}</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      background: #f2f4f8;
-      color: #1e2a3a;
-      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-      line-height: 1.6;
-    }
-
-    .report-container {
-      max-width: 1180px;
-      margin: 36px auto;
-      background: #ffffff;
-      border-radius: 22px;
-      box-shadow: 0 20px 38px -20px rgba(15, 23, 42, 0.35);
-      overflow: hidden;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 18px;
-      padding: 34px 42px;
-      background: linear-gradient(135deg, #0b2b3b 0%, #1a4b6e 100%);
-      color: white;
-    }
-
-    .header h1 {
-      margin: 0;
-      font-size: 30px;
-      font-weight: 700;
-    }
-
-    .header p {
-      margin: 6px 0 0;
-      opacity: 0.78;
-    }
-
-    .logo {
-      object-fit: contain;
-    }
-
-    .mono-logo {
-      width: 18px;
-      height: 18px;
-      object-fit: contain;
-      opacity: 0.65;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-      padding: 22px 42px;
-      background: #f8fafc;
-      border-bottom: 1px solid #e2e8f0;
-    }
-
-    .info-label {
-      display: block;
-      color: #64748b;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-    }
-
-    .info-value {
-      display: block;
-      margin-top: 4px;
-      color: #0f172a;
-      font-size: 15px;
-      word-break: break-all;
-    }
-
-    .content {
-      padding: 28px 42px 40px;
-    }
-
-    .summary {
-      margin: 0 0 28px;
-      padding: 22px 26px;
-      border-left: 6px solid #eab308;
-      border-radius: 18px;
-      background: #fefce8;
-    }
-
-    .summary h2 {
-      margin: 0 0 14px;
-      color: #0f172a;
-      font-size: 21px;
-    }
-
-    .stats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 18px;
-    }
-
-    .stat-badge {
-      padding: 7px 16px;
-      border-radius: 999px;
-      background: white;
-      font-weight: 700;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-    }
-
-    .critical {
-      background: #7f1d1d;
-      color: white;
-    }
-
-    .high {
-      background: #b91c1c;
-      color: white;
-    }
-
-    .medium {
-      background: #eab308;
-      color: #1e1b2e;
-    }
-
-    .low {
-      background: #2b6e4f;
-      color: white;
-    }
-
-    .info {
-      background: #dbeafe;
-      color: #1e40af;
-    }
-
-    .finding {
-      margin: 26px 0;
-      border: 1px solid #e2e8f0;
-      border-radius: 20px;
-      overflow: hidden;
-      background: white;
-    }
-
-    .finding-header {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 20px 26px;
-      border-bottom: 1px solid #edf2f7;
-      background: #f8fafc;
-    }
-
-    .finding h2 {
-      margin: 4px 0 0;
-      font-size: 21px;
-    }
-
-    .risk-tag {
-      align-self: flex-start;
-      padding: 6px 14px;
-      border-radius: 999px;
-      background: #fee2e2;
-      color: #991b1b;
-      font-size: 13px;
-      font-weight: 800;
-    }
-
-    .finding-body {
-      padding: 22px 26px 26px;
-    }
-
-    .finding-meta {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px;
-      margin: 0 0 18px;
-    }
-
-    .finding-meta div {
-      padding: 12px 14px;
-      border-radius: 14px;
-      background: #f8fafc;
-    }
-
-    dt {
-      color: #64748b;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    dd {
-      margin: 4px 0 0;
-      color: #0f172a;
-      word-break: break-all;
-    }
-
-    .finding-section h3,
-    .code-card h3 {
-      margin: 18px 0 8px;
-      font-size: 16px;
-      color: #0f172a;
-    }
-
-    pre {
-      margin: 10px 0 0;
-      padding: 16px;
-      border: 1px solid #d8e2e8;
-      border-radius: 14px;
-      background: #f7fafc;
-      color: #1e293b;
-      overflow-x: auto;
-      white-space: pre-wrap;
-      font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    pre span {
-      display: block;
-    }
-
-    pre .hit {
-      margin: 0 -8px;
-      padding: 0 8px;
-      border-radius: 8px;
-      background: rgba(244, 67, 54, 0.18);
-    }
-
-    pre b {
-      display: inline-block;
-      min-width: 42px;
-      margin-right: 10px;
-      color: #64748b;
-      font-weight: 500;
-    }
-
-    .code-card {
-      margin: 22px 0 0;
-    }
-
-    .footer {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 16px;
-      padding: 18px 42px;
-      color: #64748b;
-      background: #f8fafc;
-      border-top: 1px solid #e2e8f0;
-      font-size: 13px;
-    }
-
-    .footer-note {
-      justify-self: center;
-      font-weight: 700;
-    }
-  </style>
+  <link rel="stylesheet" href="html.css">
 </head>
 
 <body>
@@ -283,32 +26,24 @@
     </section>
 
     <section class="content">
-      {{ overview }}
+      <section class="summary">
+        <h2>执行摘要</h2>
+        <p>{{ overview }}</p>
+      </section>
 
       <h2>审计发现</h2>
       {{# findings }}
       <article class="finding risk-{{ risk_class }}">
         <div class="finding-header">
           <div>
-            <h2>{{ finding_id }}</h2>
+            <h2>Finding {{ finding_id }}</h2>
           </div>
-          <span class="risk-tag">{{ risk_level }}</span>
         </div>
         <div class="finding-body">
-          <dl class="finding-meta">
-            <div>
-              <dt>规则 ID</dt>
-              <dd>{{ rule_id }}</dd>
-            </div>
-            <div>
-              <dt>风险等级</dt>
-              <dd>{{ risk_level }}</dd>
-            </div>
-          </dl>
-          <div class="finding-section">
-            <h3>问题概述</h3>
-            <p>{{ issue_summary }}</p>
-          </div>
+          <p class="finding-line"><strong>规则 ID：</strong>{{ rule_id }} <strong>风险等级：</strong>{{ risk_level }}</p>
+          <p class="finding-location"><strong>漏洞位置：</strong>{{ vulnerability_location }}</p>
+          <p class="finding-flow"><strong>传递链路：</strong>{{ data_flow }}</p>
+          <p class="finding-summary"><strong>问题概述：</strong>{{ issue_summary }}</p>
           {{ highlighted_code }}
         </div>
       </article>

@@ -8,20 +8,23 @@
 
 项目路径：{{ project_path }}
 
-生成时间：{{ generated_at }}
+日期：{{ date }}
 
 -------------------------------------------
+
+## 执行摘要
 
 {{ overview }}
 
 ## 审计发现
 
 {{# findings }}
-### {{ finding_id }}
+### Finding {{ finding_id }}
 
-- **规则 ID**: {{ rule_id }}
-- **风险等级**: {{ risk_level }}
+- **规则 ID**: {{ rule_id }}  **风险等级**: {{ risk_level }}
 - **问题概述**: {{ issue_summary }}
+- **漏洞位置**: {{ vulnerability_location }}
+- **传递链路**: {{ data_flow }}
 
 {{ highlighted_code }}
 

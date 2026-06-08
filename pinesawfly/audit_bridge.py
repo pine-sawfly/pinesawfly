@@ -59,12 +59,15 @@ REPORT_SYMBOLS = [
     "{{ unit }}",
     "{{ project_path }}",
     "{{ generated_at }}",
+    "{{ date }}",
     "{{ overview }}",
     "{{# findings }}",
     "{{ finding_id }}",
     "{{ rule_id }}",
     "{{ risk_level }}",
     "{{ issue_summary }}",
+    "{{ vulnerability_location }}",
+    "{{ data_flow }}",
     "{{ highlighted_code }}",
     "{{/ findings }}",
 ]
@@ -168,6 +171,7 @@ class ScanWorker(QObject):
             "line": int(vuln.get("line") or 0),
             "description": vuln.get("description", ""),
             "match": vuln.get("match", ""),
+            "details": vuln.get("details", {}),
             "absolutePath": str(file_path),
         }
 
@@ -658,40 +662,36 @@ class AuditBridge(QObject):
     def _default_report_template(self, report_format: str) -> str:
         if report_format in {"HTML", "PDF"}:
             return (
-                "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>{{ title }}</title></head><body>"
-                "<h1>{{ title }}</h1>{{ logo }}<p>{{ author }}</p><p>{{ project_path }}</p><p>{{ generated_at }}</p>"
-                "{{ overview }}<h2>审计发现</h2>{{ findings }}</body></html>"
-            )
-        return "# {{ title }}\n\n{{ logo }}\n\n{{ author }}\n\n{{ project_path }}\n\n{{ generated_at }}\n\n{{ overview }}\n\n## 审计发现\n\n{{ findings }}\n"
-
-    def _default_report_template(self, report_format: str) -> str:
-        if report_format in {"HTML", "PDF"}:
-            return (
                 '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>{{ title }}</title></head><body>'
-                "<h1>{{ title }}</h1>{{ color_logo }}<p>{{ author }}</p><p>{{ unit }}</p><p>{{ project_path }}</p><p>{{ generated_at }}</p>"
-                "{{ overview }}<h2>审计发现</h2>{{# findings }}<h3>{{ finding_id }}</h3>"
-                "<p>{{ rule_id }} / {{ risk_level }}</p><p>{{ issue_summary }}</p>{{ highlighted_code }}{{/ findings }}</body></html>"
+                "<h1>{{ title }}</h1>{{ color_logo }}<p>作者：{{ author }}</p><p>单位：{{ unit }}</p>"
+                "<p>项目路径：{{ project_path }}</p><p>日期：{{ date }}</p>"
+                "{{ overview }}<h2>审计发现</h2>{{# findings }}<h3>Finding {{ finding_id }}</h3>"
+                "<p>规则 ID：{{ rule_id }} / 风险等级：{{ risk_level }}</p><p>{{ issue_summary }}</p>"
+                "<p>漏洞位置：{{ vulnerability_location }}</p><p>传递链路：{{ data_flow }}</p>{{ highlighted_code }}{{/ findings }}</body></html>"
             )
         return (
             "# {{ title }}\n\n"
             "{{ color_logo }}\n\n"
-            "{{ author }}\n\n"
-            "{{ unit }}\n\n"
-            "{{ project_path }}\n\n"
-            "{{ generated_at }}\n\n"
+            "作者：{{ author }}\n\n"
+            "单位：{{ unit }}\n\n"
+            "项目路径：{{ project_path }}\n\n"
+            "日期：{{ date }}\n\n"
             "{{ overview }}\n\n"
             "## 审计发现\n\n"
             "{{# findings }}\n"
-            "### {{ finding_id }}\n\n"
-            "- **规则 ID**: {{ rule_id }}\n"
-            "- **风险等级**: {{ risk_level }}\n"
+            "### Finding {{ finding_id }}\n\n"
+            "- **规则 ID**: {{ rule_id }}  **风险等级**: {{ risk_level }}\n"
             "- **问题概述**: {{ issue_summary }}\n\n"
+            "- **漏洞位置**: {{ vulnerability_location }}\n"
+            "- **传递链路**: {{ data_flow }}\n\n"
             "{{ highlighted_code }}\n\n"
             "{{/ findings }}\n"
         )
 
     def _render_template(self, report_format: str) -> str:
         template = self._load_report_template(report_format)
+        if report_format in {"HTML", "PDF"}:
+            template = self._inline_report_styles(template, report_format)
         html_mode = report_format in {"HTML", "PDF"}
         template = self._render_finding_loops(template, html_mode)
         values = self._template_values(html_mode, report_format)
@@ -699,15 +699,40 @@ class AuditBridge(QObject):
             template = template.replace(symbol, value)
         return template
 
+    def _inline_report_styles(self, template: str, report_format: str) -> str:
+        base_dir = self._report_template_path(report_format).parent
+
+        def replace(match: re.Match[str]) -> str:
+            href = html.unescape(match.group("href"))
+            css_path = (base_dir / href).resolve()
+            try:
+                if not css_path.is_file() or base_dir.resolve() not in css_path.parents:
+                    return match.group(0)
+                css = css_path.read_text(encoding="utf-8")
+            except OSError:
+                logger.debug("unable to inline report stylesheet %s", css_path, exc_info=True)
+                return match.group(0)
+            return f"<style>\n{css}\n</style>"
+
+        pattern = re.compile(
+            r"<link\b(?=[^>]*\brel=[\"']stylesheet[\"'])(?=[^>]*\bhref=[\"'](?P<href>[^\"']+)[\"'])[^>]*>",
+            re.IGNORECASE,
+        )
+        return pattern.sub(replace, template)
+
     def _report_payload(self) -> dict[str, object]:
+        now = datetime.now()
+        summary = self._report_summary()
         return {
             "title": self._report_title,
             "author": self._report_author,
             "unit": self._report_unit,
             "projectPath": self._project_path,
-            "generatedAt": datetime.now().isoformat(timespec="seconds"),
-            "summary": self._report_summary(),
-            "findings": self._findings,
+            "generatedAt": now.isoformat(timespec="seconds"),
+            "date": f"{now.year}年{now.month}月{now.day}日",
+            "overview": self._overview_text(int(summary.get("total", 0) or 0), summary.get("severityCount", {})),
+            "summary": summary,
+            "findings": [self._finding_payload(index, finding) for index, finding in enumerate(self._findings, 1)],
         }
 
     def _report_summary(self) -> dict[str, object]:
@@ -732,6 +757,7 @@ class AuditBridge(QObject):
             "{{ project_path }}": self._render_project_path(html_mode, str(payload["projectPath"])),
             "{{ generated_at }}": self._render_generated_at(html_mode, str(payload["generatedAt"])),
             "{{ generated_at_value }}": html.escape(str(payload["generatedAt"])) if html_mode else str(payload["generatedAt"]),
+            "{{ date }}": self._render_generated_at(html_mode, str(payload["date"])),
             "{{ overview }}": self._render_overview(html_mode, payload["summary"]),
             "{{ findings }}": self._render_findings(html_mode),
             "{{ affected_locations }}": "",
@@ -808,6 +834,7 @@ class AuditBridge(QObject):
         if not self._report_include_generated_at:
             return ""
         return html.escape(generated_at) if html_mode else generated_at
+
     def _metadata_span(self, label: str, value: str, html_mode: bool) -> str:
         if html_mode:
             return (
@@ -822,21 +849,23 @@ class AuditBridge(QObject):
         if not self._report_include_summary:
             return ""
         severity_count = summary.get("severityCount", {})
-        if html_mode:
-            stats = "".join(
-                f'<span class="stat-badge {self._severity_class(str(severity))}">{html.escape(str(severity))}: {count}</span>'
-                for severity, count in severity_count.items()
-            )
-            return (
-                '<section class="summary">'
-                "<h2>执行摘要</h2>"
-                f"<p>本次扫描共发现 <strong>{summary.get('total', 0)}</strong> 个问题。请优先处理高危和可被用户输入触发的问题。</p>"
-                f'<div class="stats"><span class="stat-badge total">总数: {summary.get("total", 0)}</span>{stats}</div>'
-                "</section>"
-            )
-        lines = ["## 执行摘要", "", f"- 问题总数: {summary.get('total', 0)}"]
-        lines.extend(f"- {severity}: {count}" for severity, count in severity_count.items())
-        return "\n".join(lines)
+        total = int(summary.get("total", 0) or 0)
+        overview_text = self._overview_text(total, severity_count)
+        return html.escape(overview_text) if html_mode else overview_text
+
+    def _overview_text(self, total: int, severity_count: dict[str, object]) -> str:
+        critical = self._count_severity(severity_count, {"critical", "严重", "致命"})
+        high = self._count_severity(severity_count, {"high", "高危", "高"})
+        medium = self._count_severity(severity_count, {"medium", "中危", "中"})
+        low = self._count_severity(severity_count, {"low", "低危", "低"})
+        return f"共发现{total}个安全缺陷，其中严重漏洞{critical}个、高危{high}个、中危{medium}个、低危{low}个。"
+
+    def _count_severity(self, severity_count: dict[str, object], names: set[str]) -> int:
+        total = 0
+        for severity, count in severity_count.items():
+            if str(severity).lower() in names:
+                total += int(count or 0)
+        return total
 
     def _render_findings(self, html_mode: bool) -> str:
         if not self._findings:
@@ -844,7 +873,7 @@ class AuditBridge(QObject):
         block = self._default_finding_block(html_mode)
         return self._render_finding_loop_block(block, html_mode)
 
-    def _render_finding_card(self, index: int, finding: dict[str, object]) -> str:
+    def _render_finding_card(self, index: int, finding: dict[str, object], html_mode: bool = True) -> str:
         return self._render_finding_block(self._default_finding_block(html_mode), index, finding, html_mode)
 
     def _render_finding_loops(self, template: str, html_mode: bool) -> str:
@@ -868,43 +897,96 @@ class AuditBridge(QObject):
         return rendered
 
     def _finding_template_values(self, index: int, finding: dict[str, object], html_mode: bool) -> dict[str, str]:
+        payload = self._finding_payload(index, finding)
         values = {
-            "{{ finding_id }}": f"Finding {index:03d}",
-            "{{ rule_id }}": str(finding.get("ruleId", "未知")),
-            "{{ risk_level }}": str(finding.get("severity", "未知")),
-            "{{ risk_class }}": self._severity_class(str(finding.get("severity", "未知"))),
-            "{{ issue_summary }}": str(finding.get("description", "")),
+            "{{ finding_id }}": str(payload["id"]),
+            "{{ rule_id }}": str(payload["ruleId"]),
+            "{{ risk_level }}": str(payload["severity"]),
+            "{{ risk_class }}": str(payload["riskClass"]),
+            "{{ issue_summary }}": str(payload["summary"]),
+            "{{ vulnerability_location }}": str(payload["location"]),
+            "{{ data_flow }}": str(payload["dataFlow"]),
             "{{ highlighted_code }}": self._code_snippet(index, finding, html_mode) if self._report_include_code_snippet else "",
         }
+        html_safe_symbols = {"{{ highlighted_code }}"}
         if html_mode:
-            return {symbol: value if symbol == "{{ highlighted_code }}" else html.escape(value) for symbol, value in values.items()}
+            return {symbol: value if symbol in html_safe_symbols else html.escape(value) for symbol, value in values.items()}
         return values
+
+    def _finding_payload(self, index: int, finding: dict[str, object]) -> dict[str, object]:
+        severity = str(finding.get("severity", "未知"))
+        return {
+            "id": f"{index:03d}",
+            "ruleId": str(finding.get("ruleId", "未知")),
+            "ruleName": str(finding.get("ruleName", "未知规则")),
+            "severity": severity,
+            "riskClass": self._severity_class(severity),
+            "summary": str(finding.get("description", "")),
+            "location": self._finding_location(finding),
+            "dataFlow": self._finding_data_flow(finding),
+            "match": str(finding.get("match", "")),
+            "file": str(finding.get("file", "")),
+            "line": int(finding.get("line") or 0),
+        }
 
     def _default_finding_block(self, html_mode: bool) -> str:
         if html_mode:
             return (
                 '<article class="finding risk-{{ risk_class }}">'
                 '<div class="finding-header">'
-                '<div><h2>{{ finding_id }}</h2></div>'
-                '<span class="risk-tag">{{ risk_level }}</span>'
+                '<div><h2>Finding {{ finding_id }}</h2></div>'
                 '</div>'
                 '<div class="finding-body">'
-                '<dl class="finding-meta">'
-                '<div><dt>规则 ID</dt><dd>{{ rule_id }}</dd></div>'
-                '<div><dt>风险等级</dt><dd>{{ risk_level }}</dd></div>'
-                '</dl>'
-                '<div class="finding-section"><h3>问题概述</h3><p>{{ issue_summary }}</p></div>'
+                '<p class="finding-line"><strong>规则 ID：</strong>{{ rule_id }} <strong>风险等级：</strong>{{ risk_level }}</p>'
+                '<p class="finding-summary"><strong>问题概述：</strong>{{ issue_summary }}</p>'
+                '<div class="finding-section"><h3>漏洞位置</h3><p>{{ vulnerability_location }}</p></div>'
+                '<div class="finding-section"><h3>传递链路</h3><p>{{ data_flow }}</p></div>'
                 '{{ highlighted_code }}'
                 '</div>'
                 '</article>'
             )
         return (
-            "### {{ finding_id }}\n\n"
-            "- **规则 ID**: {{ rule_id }}\n"
-            "- **风险等级**: {{ risk_level }}\n"
+            "### Finding {{ finding_id }}\n\n"
+            "- **规则 ID**: {{ rule_id }}  **风险等级**: {{ risk_level }}\n"
             "- **问题概述**: {{ issue_summary }}\n\n"
+            "- **漏洞位置**: {{ vulnerability_location }}\n"
+            "- **传递链路**: {{ data_flow }}\n\n"
             "{{ highlighted_code }}\n"
         )
+
+    def _finding_location(self, finding: dict[str, object]) -> str:
+        file_name = str(finding.get("file") or "")
+        line = int(finding.get("line") or 0)
+        if not file_name:
+            return ""
+        if line <= 0:
+            return file_name.replace("\\", "/")
+
+        path = Path(str(finding.get("absolutePath", "")))
+        end = line
+        if path.is_file():
+            try:
+                lines = FileModule.read_file_with_encoding(path).splitlines()
+                _start, end = self._snippet_range(path, lines, line)
+            except OSError:
+                end = line
+        suffix = f":{line}" if end == line else f":{line}-{end}"
+        normalized_file = file_name.replace("\\", "/")
+        return f"/{normalized_file}{suffix}"
+
+    def _finding_data_flow(self, finding: dict[str, object]) -> str:
+        details = finding.get("details", {})
+        sources = details.get("sources", []) if isinstance(details, dict) else []
+        transforms = details.get("transforms", []) if isinstance(details, dict) else []
+        match = str(finding.get("match") or "").strip()
+        parts = [str(item) for item in sources if str(item).strip()]
+        parts.extend(str(item) for item in transforms if str(item).strip())
+        if parts and match:
+            parts.append(match)
+        if parts:
+            return " -> ".join(parts)
+        rule_id = str(finding.get("ruleId") or "静态规则")
+        return f"{rule_id} 静态规则匹配 -> {match}" if match else f"{rule_id} 静态规则匹配"
 
     def _render_code_snippets(self, html_mode: bool) -> str:
         if not self._report_include_code_snippet or not self._findings:
@@ -918,9 +1000,12 @@ class AuditBridge(QObject):
         return "## 高亮代码片段\n\n" + "\n\n".join(snippets)
 
     def _code_snippet(self, index: int, finding: dict[str, object], html_mode: bool) -> str:
-        path = Path(str(finding.get("absolutePath", "")))
+        absolute_path = str(finding.get("absolutePath", "")).strip()
+        if not absolute_path:
+            return ""
+        path = Path(absolute_path)
         line = int(finding.get("line") or 0)
-        if not path.exists() or line <= 0:
+        if not path.is_file() or line <= 0:
             return ""
         try:
             lines = FileModule.read_file_with_encoding(path).splitlines()
@@ -1014,19 +1099,19 @@ class AuditBridge(QObject):
         lines = [
             str(payload["title"]),
             f"项目: {payload['projectPath']}",
-            f"生成时间: {payload['generatedAt']}",
+            f"日期: {payload['date']}",
         ]
         if self._report_include_summary:
-            lines.append(f"问题总数: {payload['summary']['total']}")
-            for severity, count in payload["summary"]["severityCount"].items():
-                lines.append(f"{severity}: {count}")
+            lines.append("执行摘要")
+            lines.append(str(payload["overview"]))
         lines.append("")
-        for index, finding in enumerate(self._findings, 1):
-            lines.append(f"Finding {index:03d}")
-            lines.append(f"  规则 ID: {finding.get('ruleId', '未知')}")
-            lines.append(f"  风险等级: {finding.get('severity', '未知')}")
-            lines.append(f"  问题概述: {finding.get('description', '')}")
+        for finding in payload["findings"]:
+            lines.append(f"Finding {finding['id']}")
+            lines.append(f"  规则 ID: {finding['ruleId']}  风险等级: {finding['severity']}")
+            lines.append(f"  漏洞位置: {finding['location']}")
+            lines.append(f"  传递链路: {finding['dataFlow']}")
+            lines.append(f"  问题概述: {finding['summary']}")
             lines.append("")
-        if not self._findings:
+        if not payload["findings"]:
             lines.append("未发现问题。")
         return "\n".join(lines)

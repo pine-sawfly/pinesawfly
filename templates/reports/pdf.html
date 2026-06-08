@@ -3,149 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <style>
-    body {
-      color: #1d1b20;
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-      font-size: 10.5pt;
-      line-height: 1.5;
-    }
-
-    h1 {
-      color: #006a60;
-      font-size: 23pt;
-      margin-bottom: 6pt;
-    }
-
-    h2 {
-      color: #12372f;
-      font-size: 15pt;
-      margin-top: 18pt;
-    }
-
-    h3 {
-      color: #1d1b20;
-      font-size: 12pt;
-      margin-bottom: 6pt;
-    }
-
-    .logo {
-      object-fit: contain;
-    }
-
-    .cover {
-      text-align: center;
-      padding-top: 0;
-      margin-bottom: 16pt;
-    }
-
-    .cover .logo {
-      height: auto;
-      margin-bottom: 14pt;
-    }
-
-    .logo-row {
-      text-align: center;
-    }
-
-    .cover h1 {
-      margin: 0 0 12pt;
-      font-size: 27pt;
-      color: #006a60;
-    }
-
-    .cover-meta {
-      margin: 6pt 0;
-      color: #46534d;
-      font-size: 12pt;
-    }
-
-    .page-break {
-      page-break-after: always;
-    }
-
-    .info-grid,
-    .summary,
-    .finding,
-    .code-card {
-      border: 1px solid #d7e1dc;
-      border-radius: 10px;
-      padding: 10pt;
-      margin: 10pt 0;
-    }
-
-    .info-item {
-      margin: 4pt 0;
-    }
-
-    .info-label {
-      color: #5f6f68;
-      font-weight: 700;
-    }
-
-    .info-value {
-      color: #1d1b20;
-    }
-
-    .summary {
-      background: #f3faf6;
-    }
-
-    .stats {
-      margin-top: 8pt;
-    }
-
-    .stat-badge {
-      display: inline-block;
-      padding: 3pt 7pt;
-      margin: 2pt;
-      border-radius: 10px;
-      background: #e6f2ed;
-      font-weight: 700;
-    }
-
-    .finding-header {
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 6pt;
-    }
-
-    .risk-tag {
-      color: #b3261e;
-      font-weight: 800;
-    }
-
-    .finding-meta div {
-      margin: 4pt 0;
-    }
-
-    dt {
-      color: #5f6f68;
-      font-weight: 700;
-    }
-
-    dd {
-      margin: 2pt 0 0;
-    }
-
-    pre {
-      background: #f7fafc;
-      color: #1d1b20;
-      border: 1px solid #d8e2e8;
-      padding: 8pt;
-      border-radius: 8px;
-      white-space: pre-wrap;
-      font-family: "Cascadia Code", Consolas, monospace;
-      font-size: 9pt;
-    }
-
-    .hit {
-      background: rgba(244, 67, 54, 0.18);
-    }
-
-    b {
-      color: #64748b;
-    }
-  </style>
+  <link rel="stylesheet" href="pdf.css">
 </head>
 
 <body>
@@ -155,33 +13,25 @@
     <h1>Pinesawfly审计报告</h1>
     <div class="cover-meta">作者：{{ author }}</div>
     <div class="cover-meta">单位：{{ unit }}</div>
-    <div class="cover-meta">日期：{{ generated_at }}</div>
+    <div class="cover-meta">日期：{{ date }}</div>
   </section>
   <div class="page-break"></div>
 
-
-
-  {{ overview }}
+  <section class="summary">
+    <h2>执行摘要</h2>
+    <p>本次代码审计采用Pinesawfly自动审计工具结合AI复查的方式，针对{{ project_path }}进行安全评估。{{ overview }} 高风险问题主要集中在注入、访问控制缺陷及敏感数据暴露等方面，建议优先修复本次发现的高危缺陷。</p>
+  </section>
 
   <h2>审计发现</h2>
   {{# findings }}
   <article class="finding risk-{{ risk_class }}">
     <div class="finding-header">
-      <h2>{{ finding_id }}</h2>
-      <div class="risk-tag">{{ risk_level }}</div>
+      <h2>Finding {{ finding_id }}</h2>
     </div>
-    <dl class="finding-meta">
-      <div>
-        <dt>规则 ID</dt>
-        <dd>{{ rule_id }}</dd>
-      </div>
-      <div>
-        <dt>风险等级</dt>
-        <dd>{{ risk_level }}</dd>
-      </div>
-    </dl>
-    <h3>问题概述</h3>
-    <p>{{ issue_summary }}</p>
+    <p class="finding-line"><strong>规则 ID：</strong>{{ rule_id }} <strong>风险等级：</strong>{{ risk_level }}</p>
+    <p class="finding-location"><strong>漏洞位置：</strong>{{ vulnerability_location }}</p>
+    <p class="finding-flow"><strong>传递链路：</strong>{{ data_flow }}</p>
+    <p class="finding-summary"><strong>问题概述：</strong>{{ issue_summary }}</p>
     {{ highlighted_code }}
   </article>
   {{/ findings }}
