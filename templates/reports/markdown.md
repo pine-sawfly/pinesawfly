@@ -26,6 +26,6 @@
 - **漏洞位置**: {{ vulnerability_location }}
 - **传递链路**: {{ data_flow }}
 
-{{ highlighted_code }}
+{{ evidence_code }}
 
 {{/ findings }}

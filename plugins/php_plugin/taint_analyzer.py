@@ -67,6 +67,7 @@ class TaintAnalyzer:
             "hex2bin",
         }
         self.sanitizers = {"intval", "abs", "floatval", "boolval", "htmlspecialchars", "htmlentities", "filter_var"}
+        self.sql_value_normalizers = {"md5", "sha1", "hash", "password_hash", "crc32"}
         self.sql_escapers = {"mysql_real_escape_string", "mysqli_real_escape_string", "addslashes"}
         self.dangerous_callable_names = self.code_sinks | self.command_sinks | {"preg_replace"}
         self.suspicious_command_pattern = re.compile(
@@ -121,6 +122,9 @@ class TaintAnalyzer:
                     state = existing.merge(state)
                 self.variables[variable] = state
                 self._check_sql_assignment(node, variable, right, state)
+            access_key = self._access_key(left)
+            if access_key:
+                self.variables[access_key] = state
             return state
 
         if node.type == "function_call_expression":
@@ -151,8 +155,13 @@ class TaintAnalyzer:
         if node.type == "subscript_expression":
             if self._is_uploaded_tmp_name_access(node):
                 return ValueState()
+            access_key = self._access_key(node)
+            if access_key and access_key in self.variables:
+                return self.variables[access_key]
             if self._is_files_entry_access(node):
-                return ValueState(tainted=True, upload_file_entry=True, sources=["$_FILES"])
+                return ValueState(tainted=True, upload_file_entry=True, sources=[self._text(node)])
+            if self._is_superglobal_access(node):
+                return ValueState(tainted=True, sources=[self._text(node)])
             state = ValueState()
             for child in node.children:
                 state = state.merge(self._eval_expr(child))
@@ -160,6 +169,12 @@ class TaintAnalyzer:
 
         if node.type == "assignment_expression":
             return self._process_node(node)
+
+        if node.type == "cast_expression":
+            cast_type = next((self._text(child).lower() for child in node.children if child.type == "cast_type"), "")
+            if cast_type in {"int", "integer", "float", "double", "real", "bool", "boolean"}:
+                return ValueState()
+            return self._merge_states(self._eval_expr(child) for child in node.children if child.is_named and child.type != "cast_type")
 
         if node.type == "function_call_expression":
             return self._eval_function_call(node)
@@ -211,6 +226,8 @@ class TaintAnalyzer:
             if lowered in self.callback_sinks:
                 self._check_callback_sink(node, lowered, arguments)
             if lowered in self.sanitizers:
+                return ValueState()
+            if lowered in self.sql_value_normalizers:
                 return ValueState()
             if lowered in self.decode_functions:
                 return self._decode_state(lowered, arguments, argument_state)
@@ -349,6 +366,9 @@ class TaintAnalyzer:
             return
         if not state.tainted and "dynamic-sql-template" not in state.transforms:
             return
+        for item in (variable, self._text(right)):
+            if item not in state.transforms:
+                state.transforms.append(item)
         escaped = any(transform in self.sql_escapers for transform in state.transforms)
         source = ", ".join(state.sources) or "动态变量"
         description = f"变量 {variable} 被赋值为包含 {source} 的动态 SQL 模板"
@@ -550,6 +570,10 @@ class TaintAnalyzer:
         base = self._subscript_base(node)
         return bool(base and base.type == "variable_name" and self._text(base) == "$_FILES" and self._subscript_key(node) != "tmp_name")
 
+    def _is_superglobal_access(self, node: Node) -> bool:
+        base = self._subscript_base(node)
+        return bool(base and base.type == "variable_name" and self._text(base) in self.superglobals)
+
     def _subscript_base(self, node: Node) -> Node | None:
         return next((child for child in node.children if child.is_named and child.type != "string"), None)
 
@@ -582,6 +606,11 @@ class TaintAnalyzer:
     def _variable_key(self, node: Node | None) -> str | None:
         if node and node.type == "variable_name":
             return self._text(node)
+        return None
+
+    def _access_key(self, node: Node | None) -> str | None:
+        if node and node.type == "subscript_expression":
+            return re.sub(r"\s+", "", self._text(node))
         return None
 
     def _child_by_field(self, node: Node, field: str) -> Node | None:

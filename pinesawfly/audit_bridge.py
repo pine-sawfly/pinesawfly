@@ -17,7 +17,7 @@ from PySide6.QtSvg import QSvgRenderer
 
 from modules.file_module import FileModule
 from modules.generic_rule_engine import GenericRuleEngine
-from pinesawfly.syntax_highlighter import highlight_code, parser_for
+from pinesawfly.syntax_highlighter import highlight_code
 
 logger = logging.getLogger(__name__)
 
@@ -30,26 +30,6 @@ SNIPPET_LANGUAGES = {
     ".java": "java",
     ".lua": "lua",
     ".go": "go",
-}
-SNIPPET_SCOPE_NODES = {
-    "assignment_expression",
-    "class_declaration",
-    "class_definition",
-    "constructor_declaration",
-    "expression_statement",
-    "for_statement",
-    "foreach_statement",
-    "function_declaration",
-    "function_definition",
-    "if_statement",
-    "interface_declaration",
-    "local_function",
-    "method_declaration",
-    "method_definition",
-    "switch_statement",
-    "trait_declaration",
-    "try_statement",
-    "while_statement",
 }
 REPORT_SYMBOLS = [
     "{{ title }}",
@@ -68,7 +48,7 @@ REPORT_SYMBOLS = [
     "{{ issue_summary }}",
     "{{ vulnerability_location }}",
     "{{ data_flow }}",
-    "{{ highlighted_code }}",
+    "{{ evidence_code }}",
     "{{/ findings }}",
 ]
 FINDING_LOOP_PATTERN = re.compile(r"{{#\s*findings\s*}}(.*?){{/\s*findings\s*}}", re.DOTALL)
@@ -667,7 +647,7 @@ class AuditBridge(QObject):
                 "<p>项目路径：{{ project_path }}</p><p>日期：{{ date }}</p>"
                 "{{ overview }}<h2>审计发现</h2>{{# findings }}<h3>Finding {{ finding_id }}</h3>"
                 "<p>规则 ID：{{ rule_id }} / 风险等级：{{ risk_level }}</p><p>{{ issue_summary }}</p>"
-                "<p>漏洞位置：{{ vulnerability_location }}</p><p>传递链路：{{ data_flow }}</p>{{ highlighted_code }}{{/ findings }}</body></html>"
+                "<p>漏洞位置：{{ vulnerability_location }}</p><p>传递链路：{{ data_flow }}</p>{{ evidence_code }}{{/ findings }}</body></html>"
             )
         return (
             "# {{ title }}\n\n"
@@ -684,7 +664,7 @@ class AuditBridge(QObject):
             "- **问题概述**: {{ issue_summary }}\n\n"
             "- **漏洞位置**: {{ vulnerability_location }}\n"
             "- **传递链路**: {{ data_flow }}\n\n"
-            "{{ highlighted_code }}\n\n"
+            "{{ evidence_code }}\n\n"
             "{{/ findings }}\n"
         )
 
@@ -761,6 +741,7 @@ class AuditBridge(QObject):
             "{{ overview }}": self._render_overview(html_mode, payload["summary"]),
             "{{ findings }}": self._render_findings(html_mode),
             "{{ affected_locations }}": "",
+            "{{ evidence_code_snippets }}": self._render_code_snippets(html_mode),
             "{{ highlighted_code_snippets }}": self._render_code_snippets(html_mode),
         }
 
@@ -906,9 +887,10 @@ class AuditBridge(QObject):
             "{{ issue_summary }}": str(payload["summary"]),
             "{{ vulnerability_location }}": str(payload["location"]),
             "{{ data_flow }}": str(payload["dataFlow"]),
+            "{{ evidence_code }}": self._code_snippet(index, finding, html_mode) if self._report_include_code_snippet else "",
             "{{ highlighted_code }}": self._code_snippet(index, finding, html_mode) if self._report_include_code_snippet else "",
         }
-        html_safe_symbols = {"{{ highlighted_code }}"}
+        html_safe_symbols = {"{{ evidence_code }}", "{{ highlighted_code }}"}
         if html_mode:
             return {symbol: value if symbol in html_safe_symbols else html.escape(value) for symbol, value in values.items()}
         return values
@@ -939,9 +921,9 @@ class AuditBridge(QObject):
                 '<div class="finding-body">'
                 '<p class="finding-line"><strong>规则 ID：</strong>{{ rule_id }} <strong>风险等级：</strong>{{ risk_level }}</p>'
                 '<p class="finding-summary"><strong>问题概述：</strong>{{ issue_summary }}</p>'
-                '<div class="finding-section"><h3>漏洞位置</h3><p>{{ vulnerability_location }}</p></div>'
-                '<div class="finding-section"><h3>传递链路</h3><p>{{ data_flow }}</p></div>'
-                '{{ highlighted_code }}'
+                '<p class="finding-location"><strong>漏洞位置：</strong>{{ vulnerability_location }}</p>'
+                '<p class="finding-flow"><strong>传递链路：</strong>{{ data_flow }}</p>'
+                '{{ evidence_code }}'
                 '</div>'
                 '</article>'
             )
@@ -951,7 +933,7 @@ class AuditBridge(QObject):
             "- **问题概述**: {{ issue_summary }}\n\n"
             "- **漏洞位置**: {{ vulnerability_location }}\n"
             "- **传递链路**: {{ data_flow }}\n\n"
-            "{{ highlighted_code }}\n"
+            "{{ evidence_code }}\n"
         )
 
     def _finding_location(self, finding: dict[str, object]) -> str:
@@ -967,7 +949,8 @@ class AuditBridge(QObject):
         if path.is_file():
             try:
                 lines = FileModule.read_file_with_encoding(path).splitlines()
-                _start, end = self._snippet_range(path, lines, line)
+                ranges = self._evidence_ranges(lines, line, finding)
+                end = ranges[-1][1] if ranges else line
             except OSError:
                 end = line
         suffix = f":{line}" if end == line else f":{line}-{end}"
@@ -979,14 +962,25 @@ class AuditBridge(QObject):
         sources = details.get("sources", []) if isinstance(details, dict) else []
         transforms = details.get("transforms", []) if isinstance(details, dict) else []
         match = str(finding.get("match") or "").strip()
-        parts = [str(item) for item in sources if str(item).strip()]
-        parts.extend(str(item) for item in transforms if str(item).strip())
+        parts = [str(item) for item in sources if self._is_report_flow_token(str(item))]
+        parts.extend(str(item) for item in transforms if self._is_report_flow_token(str(item)))
         if parts and match:
             parts.append(match)
         if parts:
-            return " -> ".join(parts)
+            return " -> ".join(self._dedupe_flow_parts(parts))
         rule_id = str(finding.get("ruleId") or "静态规则")
         return f"{rule_id} 静态规则匹配 -> {match}" if match else f"{rule_id} 静态规则匹配"
+
+    def _is_report_flow_token(self, token: str) -> bool:
+        token = token.strip()
+        return bool(token and token not in {"dynamic-sql-template"} and not token.startswith("dangerous:"))
+
+    def _dedupe_flow_parts(self, parts: list[str]) -> list[str]:
+        unique: list[str] = []
+        for part in parts:
+            if part not in unique:
+                unique.append(part)
+        return unique
 
     def _render_code_snippets(self, html_mode: bool) -> str:
         if not self._report_include_code_snippet or not self._findings:
@@ -1011,63 +1005,98 @@ class AuditBridge(QObject):
             lines = FileModule.read_file_with_encoding(path).splitlines()
         except OSError:
             return ""
-        start, end = self._snippet_range(path, lines, line)
-        selected = [(number, lines[number - 1]) for number in range(start, end + 1)]
+        evidence_lines = self._evidence_line_numbers(lines, line, finding)
+        ranges = self._merge_line_windows(sorted(evidence_lines), len(lines))
+        selected: list[tuple[int | None, str]] = []
+        for index_range, (start, end) in enumerate(ranges):
+            if index_range > 0:
+                selected.append((None, "..."))
+            selected.extend((number, lines[number - 1]) for number in range(start, end + 1))
         language = self._snippet_language_name(path)
         if html_mode:
             body = []
             for number, content in selected:
-                klass = ' class="hit"' if number == line else ""
+                if number is None:
+                    body.append(f'<span class="gap">{html.escape(content)}</span>')
+                    continue
+                klass = ' class="hit"' if number in evidence_lines else ""
                 body.append(f'<span{klass}><b>{number:>4}</b> {html.escape(content)}</span>')
             return f'<div class="code-card"><pre>{"<br>".join(body)}</pre></div>'
         body = []
         for number, content in selected:
-            marker = ">" if number == line else " "
+            if number is None:
+                body.append("  ...")
+                continue
+            marker = ">" if number in evidence_lines else " "
             body.append(f"{marker} {number:>4}: {content}")
         return f"```{language}\n" + "\n".join(body) + "\n```"
 
-    def _snippet_range(self, path: Path, lines: list[str], line: int) -> tuple[int, int]:
-        language = SNIPPET_LANGUAGES.get(path.suffix.lower())
-        if not language:
-            return self._fallback_snippet_range(lines, line)
-        try:
-            content = "\n".join(lines)
-            source = content.encode("utf-8", errors="replace")
-            parser_language = "php" if language == "php" and "<?" in content else ("php_only" if language == "php" else language)
-            tree = parser_for(parser_language).parse(source)
-            node = self._smallest_node_at_line(tree.root_node, line - 1)
-            scoped = self._best_snippet_node(node)
-            if scoped is not None:
-                start = max(1, scoped.start_point[0] + 1)
-                end = min(len(lines), scoped.end_point[0] + 1)
-                if 1 <= end - start <= 90:
-                    return start, end
-        except Exception:
-            logger.debug("tree-sitter snippet range failed for %s", path, exc_info=True)
-        return self._fallback_snippet_range(lines, line)
+    def _evidence_ranges(self, lines: list[str], line: int, finding: dict[str, object]) -> list[tuple[int, int]]:
+        evidence_lines = self._evidence_line_numbers(lines, line, finding)
+        return self._merge_line_windows(sorted(evidence_lines), len(lines))
 
-    def _smallest_node_at_line(self, node: Any, row: int) -> Any | None:
-        if node.start_point[0] > row or node.end_point[0] < row:
-            return None
-        for child in node.children:
-            found = self._smallest_node_at_line(child, row)
-            if found is not None:
-                return found
-        return node
+    def _evidence_line_numbers(self, lines: list[str], line: int, finding: dict[str, object]) -> set[int]:
+        evidence_lines = {line}
+        for token in self._evidence_tokens(finding):
+            token_lines = self._find_token_lines(lines, token)
+            if len(token_lines) == 1:
+                evidence_lines.update(token_lines)
+        return evidence_lines
 
-    def _best_snippet_node(self, node: Any | None) -> Any | None:
-        current = node
-        fallback = node
-        while current is not None:
-            if current.type in SNIPPET_SCOPE_NODES:
-                return current
-            if current.end_point[0] - current.start_point[0] >= 1:
-                fallback = current
-            current = current.parent
-        return fallback
+    def _evidence_tokens(self, finding: dict[str, object]) -> list[str]:
+        details = finding.get("details", {})
+        tokens: list[str] = []
+        if isinstance(details, dict):
+            for key in ("sources", "transforms"):
+                values = details.get(key, [])
+                if isinstance(values, list):
+                    tokens.extend(str(value) for value in values)
+        match = str(finding.get("match") or "")
+        if match:
+            tokens.append(match)
+        return [token.strip() for token in tokens if self._is_specific_evidence_token(token)]
 
-    def _fallback_snippet_range(self, lines: list[str], line: int) -> tuple[int, int]:
-        return max(1, line - 3), min(len(lines), line + 3)
+    def _is_specific_evidence_token(self, token: str) -> bool:
+        token = token.strip()
+        if not token:
+            return False
+        if re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", token):
+            return False
+        if token in {"$_GET", "$_POST", "$_REQUEST", "$_COOKIE", "$_SERVER", "$_FILES"}:
+            return False
+        if token in {"dynamic-sql-template"}:
+            return False
+        if token.startswith("dangerous:"):
+            return False
+        return True
+
+    def _find_token_lines(self, lines: list[str], token: str) -> set[int]:
+        if len(token) > 120 or "\n" in token:
+            return set()
+        compact_token = re.sub(r"\s+", "", token)
+        found: set[int] = set()
+        for number, content in enumerate(lines, 1):
+            if token in content or (compact_token and compact_token in re.sub(r"\s+", "", content)):
+                found.add(number)
+        return found
+
+    def _merge_line_windows(self, evidence_lines: list[int], total_lines: int) -> list[tuple[int, int]]:
+        windows = []
+        for number in evidence_lines:
+            if number <= 0:
+                continue
+            windows.append((max(1, number - 2), min(total_lines, number + 2)))
+        if not windows:
+            return []
+        windows.sort()
+        merged = [windows[0]]
+        for start, end in windows[1:]:
+            prev_start, prev_end = merged[-1]
+            if start <= prev_end + 1:
+                merged[-1] = (prev_start, max(prev_end, end))
+            else:
+                merged.append((start, end))
+        return merged[:4]
 
     def _snippet_language_name(self, path: Path) -> str:
         return {
