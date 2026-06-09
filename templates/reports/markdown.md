@@ -28,4 +28,6 @@
 
 {{ evidence_code }}
 
+{{ ai_analysis }}
+
 {{/ findings }}

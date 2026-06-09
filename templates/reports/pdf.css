@@ -123,6 +123,19 @@ h3 {
   color: #12372f;
 }
 
+.finding-ai {
+  margin: 8pt 0 0;
+  padding: 7pt 9pt;
+  border-radius: 8px;
+  background: #eef7f2;
+  color: #12372a;
+  line-height: 1.6;
+}
+
+.finding-ai strong {
+  color: #00513f;
+}
+
 pre {
   background: #f7fafc;
   color: #1d1b20;

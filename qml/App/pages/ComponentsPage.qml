@@ -26,7 +26,7 @@ PageFrame {
 
         contentItem: Item {
             implicitWidth: 700
-            implicitHeight: 520
+            implicitHeight: 560
 
             Column {
                 anchors.fill: parent
@@ -58,14 +58,14 @@ PageFrame {
                 ListView {
                     id: apiList
                     width: parent.width
-                    height: 370
+                    height: 410
                     spacing: 10
                     clip: true
                     model: bridge ? bridge.aiApiConfigs : []
 
                     delegate: Rectangle {
                         width: apiList.width
-                        height: modelData.maskedKey.length > 0 ? 154 : 118
+                        height: modelData.maskedKey.length > 0 ? 198 : 162
                         radius: Styles.Theme.shape.large
                         color: Styles.Theme.color.surfaceContainer
                         border.color: Styles.Theme.color.outlineVariant
@@ -86,7 +86,7 @@ PageFrame {
                                     dense: true
                                     placeholderText: "API 名称"
                                     text: modelData.apiName
-                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, text, apiUrlField.text, keyNameField.text, newKeyField.text)
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, text, apiUrlField.text, modelNameField.text, keyNameField.text, newKeyField.text)
                                 }
 
                                 MD.TextField {
@@ -95,7 +95,7 @@ PageFrame {
                                     dense: true
                                     placeholderText: "API URL"
                                     text: modelData.apiUrl
-                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, text, keyNameField.text, newKeyField.text)
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, text, modelNameField.text, keyNameField.text, newKeyField.text)
                                 }
                             }
 
@@ -104,25 +104,46 @@ PageFrame {
                                 spacing: 8
 
                                 MD.TextField {
-                                    id: keyNameField
-                                    width: 150
+                                    id: modelNameField
+                                    width: 250
                                     dense: true
-                                    placeholderText: "Key 名称"
-                                    text: modelData.keyName
-                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, text, newKeyField.text)
+                                    placeholderText: "模型名"
+                                    text: modelData.modelName
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, text, keyNameField.text, newKeyField.text)
                                 }
 
                                 MD.TextField {
+                                    id: keyNameField
+                                    width: parent.width - modelNameField.width - 8
+                                    dense: true
+                                    placeholderText: "Key 名称"
+                                    text: modelData.keyName
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, modelNameField.text, text, newKeyField.text)
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 8
+
+                                MD.TextField {
                                     id: newKeyField
-                                    width: parent.width - keyNameField.width - deleteButton.width - 16
+                                    width: parent.width - saveButton.width - deleteButton.width - 16
                                     dense: true
                                     placeholderText: "输入新 Key 后替换"
                                     echoMode: TextInput.Password
-                                    onEditingFinished: {
-                                        if (text.length > 0) {
-                                            bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, keyNameField.text, text)
-                                            text = ""
-                                        }
+                                    onAccepted: saveButton.clicked()
+                                }
+
+                                MD.Button {
+                                    id: saveButton
+                                    width: 82
+                                    text: "保存"
+                                    icon: "save"
+                                    type: "tonal"
+                                    onClicked: {
+                                        bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, modelNameField.text, keyNameField.text, newKeyField.text)
+                                        newKeyField.text = ""
                                     }
                                 }
 
@@ -144,7 +165,7 @@ PageFrame {
                                 Text {
                                     width: parent.width
                                     height: 28
-                                    text: "当前 Key  " + modelData.maskedKey
+                                    text: "当前 Key  " + modelData.maskedKey + (modelData.keyFingerprint.length > 0 ? "  指纹 " + modelData.keyFingerprint : "")
                                     verticalAlignment: Text.AlignVCenter
                                     font.family: "Cascadia Mono"
                                     font.pixelSize: 12

@@ -185,6 +185,19 @@ body {
   color: #475569;
 }
 
+.finding-ai {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eef7f2;
+  color: #12372a;
+  line-height: 1.7;
+}
+
+.finding-ai strong {
+  color: #00513f;
+}
+
 .code-card h3 {
   margin: 18px 0 8px;
   font-size: 16px;
