@@ -216,7 +216,9 @@ PageFrame {
                             MD.Checkbox {
                                 width: 32
                                 checked: modelData.enabled
-                                onToggled: if (rulesBridge) rulesBridge.setRuleEnabled(modelData.key, checked)
+                                onToggled: function(checked) {
+                                    if (rulesBridge) rulesBridge.setRuleEnabled(modelData.key, checked)
+                                }
                             }
 
                             Column {

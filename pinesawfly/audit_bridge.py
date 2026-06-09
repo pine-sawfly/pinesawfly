@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import base64
+import ctypes
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -167,6 +168,7 @@ class AuditBridge(QObject):
     statusChanged = Signal()
     scanningChanged = Signal()
     reportSettingsChanged = Signal()
+    pluginSettingsChanged = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -193,6 +195,8 @@ class AuditBridge(QObject):
         self._report_include_summary = self._settings.value("report/includeSummary", True, bool)
         self._report_include_logo = self._settings.value("report/includeLogo", True, bool)
         self._report_include_code_snippet = self._settings.value("report/includeCodeSnippet", True, bool)
+        self._ai_plugin_enabled = self._settings.value("plugins/aiAnalysis/enabled", False, bool)
+        self._ai_api_configs = self._load_ai_api_configs()
         self._thread: QThread | None = None
         self._worker: ScanWorker | None = None
         self.setProjectPath(self._project_path)
@@ -506,6 +510,147 @@ class AuditBridge(QObject):
     def set_report_include_code_snippet(self, value: bool) -> None:
         self.setReportIncludeCodeSnippet(value)
 
+    def get_ai_plugin_enabled(self) -> bool:
+        return self._ai_plugin_enabled
+
+    def set_ai_plugin_enabled(self, value: bool) -> None:
+        self.setAiPluginEnabled(value)
+
+    def get_ai_api_configs(self) -> list[dict[str, object]]:
+        return [self._public_ai_api_config(index, config) for index, config in enumerate(self._ai_api_configs)]
+
+    @Slot(bool)
+    def setAiPluginEnabled(self, value: bool) -> None:
+        if value != self._ai_plugin_enabled:
+            self._ai_plugin_enabled = value
+            self._settings.setValue("plugins/aiAnalysis/enabled", value)
+            self.pluginSettingsChanged.emit()
+
+    @Slot()
+    def addAiApiConfig(self) -> None:
+        self._ai_api_configs.append({
+            "apiName": "OpenAI",
+            "apiUrl": "https://api.openai.com/v1/chat/completions",
+            "keyName": "OPENAI_API_KEY",
+            "apiKey": "",
+        })
+        self._save_ai_api_configs()
+
+    @Slot(int)
+    def deleteAiApiConfig(self, index: int) -> None:
+        if 0 <= index < len(self._ai_api_configs):
+            self._ai_api_configs.pop(index)
+            self._save_ai_api_configs()
+
+    @Slot(int, str, str, str, str)
+    def updateAiApiConfig(self, index: int, api_name: str, api_url: str, key_name: str, api_key: str) -> None:
+        if 0 <= index < len(self._ai_api_configs):
+            current_key = self._ai_api_configs[index].get("apiKey", "")
+            self._ai_api_configs[index] = {
+                "apiName": api_name.strip(),
+                "apiUrl": api_url.strip(),
+                "keyName": key_name.strip(),
+                "apiKey": api_key if api_key else current_key,
+            }
+            self._save_ai_api_configs()
+
+    def _load_ai_api_configs(self) -> list[dict[str, str]]:
+        raw = self._settings.value("plugins/aiAnalysis/apis", "[]", str)
+        try:
+            data = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return []
+        if not isinstance(data, list):
+            return []
+        configs = []
+        for item in data:
+            if isinstance(item, dict):
+                configs.append({
+                    "apiName": str(item.get("apiName", "")),
+                    "apiUrl": str(item.get("apiUrl", "")),
+                    "keyName": str(item.get("keyName", "")),
+                    "apiKey": self._decrypt_secret(str(item.get("apiKey", ""))),
+                })
+        return configs
+
+    def _save_ai_api_configs(self) -> None:
+        encrypted = []
+        for config in self._ai_api_configs:
+            encrypted.append({
+                "apiName": config.get("apiName", ""),
+                "apiUrl": config.get("apiUrl", ""),
+                "keyName": config.get("keyName", ""),
+                "apiKey": self._encrypt_secret(config.get("apiKey", "")),
+            })
+        self._settings.setValue("plugins/aiAnalysis/apis", json.dumps(encrypted, ensure_ascii=False))
+        self.pluginSettingsChanged.emit()
+
+    def _public_ai_api_config(self, index: int, config: dict[str, str]) -> dict[str, object]:
+        api_key = config.get("apiKey", "")
+        return {
+            "index": index,
+            "apiName": config.get("apiName", ""),
+            "apiUrl": config.get("apiUrl", ""),
+            "keyName": config.get("keyName", ""),
+            "apiKey": "",
+            "maskedKey": self._mask_secret(api_key),
+        }
+
+    def _mask_secret(self, value: str) -> str:
+        if not value:
+            return ""
+        if len(value) <= 11:
+            return "*" * len(value)
+        return f"{value[:7]}{'*' * max(4, len(value) - 11)}{value[-4:]}"
+
+    def _encrypt_secret(self, value: str) -> str:
+        if not value:
+            return ""
+        if os.name != "nt":
+            return value
+        protected = self._dpapi_protect(value.encode("utf-8"))
+        return "dpapi:" + base64.b64encode(protected).decode("ascii")
+
+    def _decrypt_secret(self, value: str) -> str:
+        if not value:
+            return ""
+        if not value.startswith("dpapi:"):
+            return value
+        if os.name != "nt":
+            return ""
+        try:
+            data = base64.b64decode(value.removeprefix("dpapi:"))
+            return self._dpapi_unprotect(data).decode("utf-8")
+        except Exception:
+            logger.debug("unable to decrypt AI API key", exc_info=True)
+            return ""
+
+    def _dpapi_protect(self, data: bytes) -> bytes:
+        return self._dpapi_crypt(data, protect=True)
+
+    def _dpapi_unprotect(self, data: bytes) -> bytes:
+        return self._dpapi_crypt(data, protect=False)
+
+    def _dpapi_crypt(self, data: bytes, protect: bool) -> bytes:
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", ctypes.c_uint), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
+
+        in_buffer = ctypes.create_string_buffer(data)
+        in_blob = DATA_BLOB(len(data), ctypes.cast(in_buffer, ctypes.POINTER(ctypes.c_ubyte)))
+        out_blob = DATA_BLOB()
+        crypt32 = ctypes.windll.crypt32
+        kernel32 = ctypes.windll.kernel32
+        if protect:
+            ok = crypt32.CryptProtectData(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob))
+        else:
+            ok = crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob))
+        if not ok:
+            raise OSError(ctypes.get_last_error())
+        try:
+            return ctypes.string_at(out_blob.pbData, out_blob.cbData)
+        finally:
+            kernel32.LocalFree(out_blob.pbData)
+
     files = Property("QVariantList", get_files, notify=filesChanged)
     projectPath = Property(str, get_project_path, notify=projectPathChanged)
     currentFile = Property(str, get_current_file, notify=currentFileChanged)
@@ -525,6 +670,8 @@ class AuditBridge(QObject):
     reportIncludeSummary = Property(bool, get_report_include_summary, set_report_include_summary, notify=reportSettingsChanged)
     reportIncludeLogo = Property(bool, get_report_include_logo, set_report_include_logo, notify=reportSettingsChanged)
     reportIncludeCodeSnippet = Property(bool, get_report_include_code_snippet, set_report_include_code_snippet, notify=reportSettingsChanged)
+    aiPluginEnabled = Property(bool, get_ai_plugin_enabled, set_ai_plugin_enabled, notify=pluginSettingsChanged)
+    aiApiConfigs = Property("QVariantList", get_ai_api_configs, notify=pluginSettingsChanged)
 
     def _highlight_code(self, content: str, file_path: str) -> str:
         return highlight_code(content, file_path)

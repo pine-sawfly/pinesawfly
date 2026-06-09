@@ -71,7 +71,9 @@ Item {
         enabled: root.enabled
         onEntered: root.isHovered = true
         onExited: root.isHovered = false
-        onPressed: ripple.play(mouse.x, mouse.y)
+        onPressed: function(mouse) {
+            ripple.play(mouse.x, mouse.y)
+        }
         onClicked: root.clicked()
     }
 

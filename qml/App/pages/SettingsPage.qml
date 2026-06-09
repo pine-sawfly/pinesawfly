@@ -23,7 +23,9 @@ PageFrame {
             }
             MD.Switch {
                 checked: style ? style.isDarkTheme : false
-                onToggled: if (style) style.setDarkTheme(checked)
+                onToggled: function(checked) {
+                    if (style) style.setDarkTheme(checked)
+                }
             }
         }
 

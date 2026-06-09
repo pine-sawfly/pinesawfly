@@ -26,7 +26,9 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onPressed: ripple.play(mouse.x, mouse.y)
+        onPressed: function(mouse) {
+            ripple.play(mouse.x, mouse.y)
+        }
         onClicked: root.clicked()
     }
 }

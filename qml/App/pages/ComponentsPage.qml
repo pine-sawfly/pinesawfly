@@ -1,73 +1,275 @@
 import QtQuick
+import QtQuick.Controls
 import "../../Core/Styles" as Styles
 import "../../Core/Controls" as MD
 
 PageFrame {
-    title: "Components"
+    title: "插件"
 
-    property bool switchValue: true
-    property bool checkboxValue: true
+    property var bridge: auditBridge
 
-    Flow {
+    Popup {
+        id: aiConfigPopup
+        modal: true
+        focus: true
+        width: 700
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        anchors.centerIn: Overlay.overlay
+
+        background: Rectangle {
+            radius: Styles.Theme.shape.large
+            color: Styles.Theme.color.surfaceContainerHigh
+            border.color: Styles.Theme.color.outlineVariant
+            border.width: 1
+        }
+
+        contentItem: Item {
+            implicitWidth: 700
+            implicitHeight: 520
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 14
+
+                Row {
+                    width: parent.width
+                    spacing: 12
+
+                    Text {
+                        width: parent.width - closeButton.width - 12
+                        text: "AI API 配置"
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 22
+                        font.weight: Font.DemiBold
+                        color: Styles.Theme.color.onSurface
+                    }
+
+                    MD.Button {
+                        id: closeButton
+                        text: "关闭"
+                        icon: "close"
+                        type: "text"
+                        onClicked: aiConfigPopup.close()
+                    }
+                }
+
+                ListView {
+                    id: apiList
+                    width: parent.width
+                    height: 370
+                    spacing: 10
+                    clip: true
+                    model: bridge ? bridge.aiApiConfigs : []
+
+                    delegate: Rectangle {
+                        width: apiList.width
+                        height: modelData.maskedKey.length > 0 ? 154 : 118
+                        radius: Styles.Theme.shape.large
+                        color: Styles.Theme.color.surfaceContainer
+                        border.color: Styles.Theme.color.outlineVariant
+                        border.width: 1
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 6
+
+                            Row {
+                                width: parent.width
+                                spacing: 8
+
+                                MD.TextField {
+                                    id: apiNameField
+                                    width: 160
+                                    dense: true
+                                    placeholderText: "API 名称"
+                                    text: modelData.apiName
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, text, apiUrlField.text, keyNameField.text, newKeyField.text)
+                                }
+
+                                MD.TextField {
+                                    id: apiUrlField
+                                    width: parent.width - 168
+                                    dense: true
+                                    placeholderText: "API URL"
+                                    text: modelData.apiUrl
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, text, keyNameField.text, newKeyField.text)
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: 8
+
+                                MD.TextField {
+                                    id: keyNameField
+                                    width: 150
+                                    dense: true
+                                    placeholderText: "Key 名称"
+                                    text: modelData.keyName
+                                    onEditingFinished: bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, text, newKeyField.text)
+                                }
+
+                                MD.TextField {
+                                    id: newKeyField
+                                    width: parent.width - keyNameField.width - deleteButton.width - 16
+                                    dense: true
+                                    placeholderText: "输入新 Key 后替换"
+                                    echoMode: TextInput.Password
+                                    onEditingFinished: {
+                                        if (text.length > 0) {
+                                            bridge.updateAiApiConfig(modelData.index, apiNameField.text, apiUrlField.text, keyNameField.text, text)
+                                            text = ""
+                                        }
+                                    }
+                                }
+
+                                MD.Button {
+                                    id: deleteButton
+                                    width: 82
+                                    text: "删除"
+                                    icon: "delete"
+                                    type: "outlined"
+                                    onClicked: bridge.deleteAiApiConfig(modelData.index)
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                visible: modelData.maskedKey.length > 0
+                                height: visible ? 28 : 0
+
+                                Text {
+                                    width: parent.width
+                                    height: 28
+                                    text: "当前 Key  " + modelData.maskedKey
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.family: "Cascadia Mono"
+                                    font.pixelSize: 12
+                                    color: Styles.Theme.color.onSurfaceVariant
+                                    elide: Text.ElideMiddle
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    spacing: 8
+
+                    MD.Button {
+                        text: "增加 API"
+                        icon: "add"
+                        type: "tonal"
+                        onClicked: if (bridge) bridge.addAiApiConfig()
+                    }
+                }
+            }
+        }
+    }
+
+    Row {
         width: parent.width
-        spacing: 18
+        spacing: 12
 
         MD.Card {
-            width: 330
-            height: 220
-            Text { text: "Buttons"; font.pixelSize: 18; font.weight: Font.DemiBold; color: Styles.Theme.color.onSurface }
-            Row {
+            width: 252
+            height: 132
+
+            Column {
+                width: parent.width
                 spacing: 10
-                MD.Button { text: "Filled"; icon: "check" }
-                MD.Button { text: "Tonal"; icon: "tune"; type: "tonal" }
-                MD.Button { text: "Outlined"; icon: "open_in_new"; type: "outlined" }
+
+                Row {
+                    width: parent.width
+                    spacing: 10
+
+                    MD.LogoIcon {
+                        width: 30
+                        height: 30
+                        iconColor: Styles.Theme.color.primary
+                    }
+
+                    Text {
+                        width: parent.width - 40
+                        height: 30
+                        text: "PHP 污点分析"
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 17
+                        font.weight: Font.DemiBold
+                        verticalAlignment: Text.AlignVCenter
+                        color: Styles.Theme.color.onSurface
+                    }
+                }
+
+                Text {
+                    text: "已启用 · 内置"
+                    font.family: Styles.Theme.typography.family
+                    font.pixelSize: 13
+                    color: Styles.Theme.color.primary
+                }
             }
         }
 
         MD.Card {
-            width: 330
-            height: 220
-            Text { text: "Selection"; font.pixelSize: 18; font.weight: Font.DemiBold; color: Styles.Theme.color.onSurface }
-            Row {
-                spacing: 24
-                MD.Switch { checked: true; onToggled: switchValue = checked }
-                MD.Checkbox { text: "启用规则"; checked: true; onToggled: checkboxValue = checked }
-            }
-        }
+            width: 252
+            height: 132
 
-        MD.Card {
-            width: 330
-            height: 220
-            Text { text: "Input"; font.pixelSize: 18; font.weight: Font.DemiBold; color: Styles.Theme.color.onSurface }
-            MD.TextField { width: 260; placeholderText: "规则名称或 CWE" }
-            MD.Slider { width: 260; value: 64 }
-        }
+            Column {
+                width: parent.width
+                spacing: 10
 
-        MD.Card {
-            width: 330
-            height: 220
-            Text { text: "Tabs"; font.pixelSize: 18; font.weight: Font.DemiBold; color: Styles.Theme.color.onSurface }
-            MD.Tabs { tabs: ["源码", "漏洞", "报告"] }
-        }
+                Row {
+                    width: parent.width
+                    spacing: 10
 
-        MD.Card {
-            width: 330
-            height: 220
-            Text { text: "Dialog"; font.pixelSize: 18; font.weight: Font.DemiBold; color: Styles.Theme.color.onSurface }
-            MD.Button { text: "打开对话框"; icon: "open_in_new"; onClicked: demoDialog.open() }
-            MD.Dialog {
-                id: demoDialog
-                title: "审计提示"
-                body: "这里可以承载规则说明、漏洞详情或导出确认。"
-            }
-        }
+                    Text {
+                        width: parent.width - switchControl.width - 10
+                        height: 32
+                        text: "AI 分析"
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 17
+                        font.weight: Font.DemiBold
+                        verticalAlignment: Text.AlignVCenter
+                        color: Styles.Theme.color.onSurface
+                    }
 
-        Item {
-            width: 330
-            height: 220
-            MD.FAB {
-                anchors.centerIn: parent
-                icon: "add"
+                    MD.Switch {
+                        id: switchControl
+                        checked: bridge ? bridge.aiPluginEnabled : false
+                        onToggled: function(checked) {
+                            if (bridge) bridge.setAiPluginEnabled(checked)
+                        }
+                    }
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 10
+
+                    Text {
+                        width: parent.width - editButton.width - 10
+                        height: 40
+                        text: bridge && bridge.aiPluginEnabled ? "已启用 · " + bridge.aiApiConfigs.length + " 个 API" : "已关闭"
+                        verticalAlignment: Text.AlignVCenter
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 13
+                        color: Styles.Theme.color.onSurfaceVariant
+                    }
+
+                    MD.Button {
+                        id: editButton
+                        width: 74
+                        text: "编辑"
+                        icon: "edit"
+                        type: "tonal"
+                        enabled: bridge && bridge.aiPluginEnabled
+                        onClicked: aiConfigPopup.open()
+                    }
+                }
             }
         }
     }

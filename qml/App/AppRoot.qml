@@ -17,7 +17,7 @@ Rectangle {
     property int drawerCollapsedWidth: 72
     property var pages: [
         { label: "首页", icon: "home", source: "pages/HomePage.qml" },
-        { label: "组件", icon: "widgets", source: "pages/ComponentsPage.qml" },
+        { label: "插件", icon: "extension", source: "pages/ComponentsPage.qml" },
         { label: "颜色", icon: "palette", source: "pages/ColorPage.qml" },
         { label: "字体", icon: "text_fields", source: "pages/TypographyPage.qml" },
         { label: "规则", icon: "rule", source: "pages/RulesPage.qml" },
