@@ -4,7 +4,6 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "Typography"
-    subtitle: "类型 token 集中在 Theme.qml，页面和控件统一读取。"
 
     MD.Card {
         width: parent.width

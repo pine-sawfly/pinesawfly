@@ -7,7 +7,6 @@ Flickable {
 
     default property alias content: contentColumn.data
     property string title: ""
-    property string subtitle: ""
 
     clip: true
     contentWidth: width
@@ -28,14 +27,5 @@ Flickable {
             color: Styles.Theme.color.onSurface
         }
 
-        Text {
-            visible: root.subtitle.length > 0
-            text: root.subtitle
-            width: parent.width
-            wrapMode: Text.WordWrap
-            font.family: Styles.Theme.typography.family
-            font.pixelSize: 14
-            color: Styles.Theme.color.onSurfaceVariant
-        }
     }
 }

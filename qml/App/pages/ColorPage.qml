@@ -4,7 +4,6 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "Color"
-    subtitle: "当前主题色板来自 Python StyleManager，切换暗色模式或种子色后自动刷新。"
 
     property var swatches: [
         "primary", "onPrimary", "primaryContainer", "onPrimaryContainer",

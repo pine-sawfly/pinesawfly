@@ -4,7 +4,6 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "Settings"
-    subtitle: "主题状态由 Python StyleManager 暴露给 QML。"
 
     property var seeds: ["#006A60", "#6750A4", "#8C1D18", "#00639B"]
     property var availableFonts: []

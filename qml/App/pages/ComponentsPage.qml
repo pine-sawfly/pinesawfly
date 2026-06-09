@@ -4,7 +4,6 @@ import "../../Core/Controls" as MD
 
 PageFrame {
     title: "Components"
-    subtitle: "Material Design 3 风格基础控件示例，控件均为独立 QML 文件。"
 
     property bool switchValue: true
     property bool checkboxValue: true
