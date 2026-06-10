@@ -198,7 +198,7 @@ PageFrame {
 
         MD.Card {
             width: 252
-            height: 132
+            height: 154
 
             Column {
                 width: parent.width
@@ -231,6 +231,29 @@ PageFrame {
                     font.family: Styles.Theme.typography.family
                     font.pixelSize: 13
                     color: Styles.Theme.color.primary
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 10
+
+                    Text {
+                        width: parent.width - dependencySwitch.width - 10
+                        height: 32
+                        text: "审计第三方依赖"
+                        verticalAlignment: Text.AlignVCenter
+                        font.family: Styles.Theme.typography.family
+                        font.pixelSize: 13
+                        color: Styles.Theme.color.onSurfaceVariant
+                    }
+
+                    MD.Switch {
+                        id: dependencySwitch
+                        checked: bridge ? bridge.includeDependencyScan : false
+                        onToggled: function(checked) {
+                            if (bridge) bridge.setIncludeDependencyScan(checked)
+                        }
+                    }
                 }
             }
         }

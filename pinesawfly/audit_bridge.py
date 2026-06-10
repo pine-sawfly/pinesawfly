@@ -37,7 +37,7 @@ ALWAYS_IGNORED_DIRS = {
     ".mypy_cache",
     ".pytest_cache",
 }
-DEPENDENCY_DIRS = {"vendor", "node_modules", "bower_components"}
+DEPENDENCY_DIRS = {"vendor", "node_modules", "bower_components", "thinkphp"}
 SNIPPET_LANGUAGES = {
     ".php": "php",
     ".py": "python",
@@ -101,9 +101,11 @@ def normalize_path(path_or_url: str) -> str:
     return path_or_url
 
 
-def is_ignored_path(path: Path) -> bool:
+def is_ignored_path(path: Path, include_dependencies: bool = False) -> bool:
     if any(part in ALWAYS_IGNORED_DIRS for part in path.parts):
         return True
+    if include_dependencies:
+        return False
     return any(_is_dependency_dir(parent) for parent in (path, *path.parents))
 
 
@@ -116,6 +118,8 @@ def _is_dependency_dir(path: Path) -> bool:
         return (path.parent / "package.json").is_file()
     if path.name == "bower_components":
         return (path.parent / "bower.json").is_file()
+    if path.name == "thinkphp":
+        return (path / "base.php").is_file() or (path / "library" / "think").is_dir()
     return False
 
 
@@ -123,9 +127,10 @@ class ScanWorker(QObject):
     finished = Signal(list, int, str)
     failed = Signal(str)
 
-    def __init__(self, project_path: str) -> None:
+    def __init__(self, project_path: str, include_dependencies: bool = False) -> None:
         super().__init__()
         self.project_path = project_path
+        self.include_dependencies = include_dependencies
 
     @Slot()
     def run(self) -> None:
@@ -142,7 +147,7 @@ class ScanWorker(QObject):
         results: list[dict[str, object]] = []
         self._prepare_codegraph(project)
         for file_path in project.rglob("*"):
-            if is_ignored_path(file_path):
+            if is_ignored_path(file_path, self.include_dependencies):
                 continue
             if file_path.is_file() and file_path.suffix.lower() in SCAN_EXTENSIONS:
                 for vuln in rule_engine.scan_file(str(file_path)):
@@ -177,7 +182,7 @@ class ScanWorker(QObject):
             if not php_plugin.initialize(str(project)):
                 return
             for php_file in project.rglob("*.php"):
-                if is_ignored_path(php_file):
+                if is_ignored_path(php_file, self.include_dependencies):
                     continue
                 for vuln in php_plugin.scan(str(php_file)):
                     results.append(self._normalize_vuln(project, php_file, vuln))
@@ -254,6 +259,7 @@ class AuditBridge(QObject):
         self._report_include_logo = self._settings.value("report/includeLogo", True, bool)
         self._report_include_code_snippet = self._settings.value("report/includeCodeSnippet", True, bool)
         self._ai_plugin_enabled = self._settings.value("plugins/aiAnalysis/enabled", False, bool)
+        self._include_dependency_scan = self._settings.value("plugins/phpAnalysis/includeDependencies", False, bool)
         self._ai_api_configs = self._load_ai_api_configs()
         self._ai_analysis_by_finding: dict[int, str] = {}
         self._last_ai_error = ""
@@ -339,7 +345,7 @@ class AuditBridge(QObject):
         self._findings = []
         self.findingsChanged.emit()
         self._thread = QThread()
-        self._worker = ScanWorker(self._project_path)
+        self._worker = ScanWorker(self._project_path, self._include_dependency_scan)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_scan_finished)
@@ -606,11 +612,24 @@ class AuditBridge(QObject):
     def set_ai_plugin_enabled(self, value: bool) -> None:
         self.setAiPluginEnabled(value)
 
+    def get_include_dependency_scan(self) -> bool:
+        return self._include_dependency_scan
+
+    def set_include_dependency_scan(self, value: bool) -> None:
+        self.setIncludeDependencyScan(value)
+
     def get_ai_api_configs(self) -> list[dict[str, object]]:
         return [self._public_ai_api_config(index, config) for index, config in enumerate(self._ai_api_configs)]
 
     def get_ai_provider_presets(self) -> list[str]:
         return AI_PROVIDER_PRESETS
+
+    @Slot(bool)
+    def setIncludeDependencyScan(self, value: bool) -> None:
+        if value != self._include_dependency_scan:
+            self._include_dependency_scan = value
+            self._settings.setValue("plugins/phpAnalysis/includeDependencies", value)
+            self.pluginSettingsChanged.emit()
 
     @Slot(bool)
     def setAiPluginEnabled(self, value: bool) -> None:
@@ -1160,6 +1179,7 @@ class AuditBridge(QObject):
     reportIncludeLogo = Property(bool, get_report_include_logo, set_report_include_logo, notify=reportSettingsChanged)
     reportIncludeCodeSnippet = Property(bool, get_report_include_code_snippet, set_report_include_code_snippet, notify=reportSettingsChanged)
     aiPluginEnabled = Property(bool, get_ai_plugin_enabled, set_ai_plugin_enabled, notify=pluginSettingsChanged)
+    includeDependencyScan = Property(bool, get_include_dependency_scan, set_include_dependency_scan, notify=pluginSettingsChanged)
     aiApiConfigs = Property("QVariantList", get_ai_api_configs, notify=pluginSettingsChanged)
     aiProviderPresets = Property("QVariantList", get_ai_provider_presets, constant=True)
 

@@ -14,8 +14,10 @@ from core.exception_handler import safe_operation
 from .php_parser import PHPAst
 
 logger = logging.getLogger(__name__)
-MAX_ANALYSIS_SECONDS = 6.0
-MAX_ANALYSIS_NODES = 50000
+MAX_ANALYSIS_SECONDS = 2.5
+MAX_ANALYSIS_NODES = 30000
+MAX_STATE_ITEMS = 40
+MAX_LITERAL_VALUES = 12
 
 
 @dataclass
@@ -34,10 +36,20 @@ class ValueState:
             suspicious_callable=self.suspicious_callable or other.suspicious_callable,
             sql_template=self.sql_template or other.sql_template,
             upload_file_entry=self.upload_file_entry or other.upload_file_entry,
-            sources=[*self.sources, *[source for source in other.sources if source not in self.sources]],
-            transforms=[*self.transforms, *[item for item in other.transforms if item not in self.transforms]],
-            literal_values=[*self.literal_values, *[value for value in other.literal_values if value not in self.literal_values]],
+            sources=self._merge_limited(self.sources, other.sources, MAX_STATE_ITEMS),
+            transforms=self._merge_limited(self.transforms, other.transforms, MAX_STATE_ITEMS),
+            literal_values=self._merge_limited(self.literal_values, other.literal_values, MAX_LITERAL_VALUES),
         )
+
+    @staticmethod
+    def _merge_limited(left: list[str], right: list[str], limit: int) -> list[str]:
+        values = list(left[:limit])
+        for item in right:
+            if item not in values:
+                values.append(item)
+                if len(values) >= limit:
+                    break
+        return values
 
 
 class TaintAnalyzer:
@@ -229,10 +241,10 @@ class TaintAnalyzer:
             merged = left_state.merge(right_state)
             concatenated = [
                 left_value + right_value
-                for left_value in left_state.literal_values
-                for right_value in right_state.literal_values
+                for left_value in left_state.literal_values[:MAX_LITERAL_VALUES]
+                for right_value in right_state.literal_values[:MAX_LITERAL_VALUES]
             ]
-            merged.literal_values = [*merged.literal_values, *[value for value in concatenated if value not in merged.literal_values]]
+            merged.literal_values = ValueState._merge_limited(merged.literal_values, concatenated, MAX_LITERAL_VALUES)
             return merged
 
         state = ValueState()

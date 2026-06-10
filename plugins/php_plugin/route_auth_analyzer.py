@@ -26,12 +26,14 @@ class ProjectContextBuilder:
             return None
 
         hints: list[str] = []
-        if (root / "app").is_dir() and any(root.glob("app/**/controller")):
-            hints.append("app/**/controller")
-        if any(root.glob("app/**/config/route.php")) or (root / "route").is_dir():
+        if any(root.glob("app/**/controller")) or any(root.glob("application/**/controller")):
+            hints.append("controller")
+        if any(root.glob("app/**/config/route.php")) or (root / "route").is_dir() or any(root.glob("route/*.php")):
             hints.append("route-config")
-        if any(root.glob("app/**/http/middleware/*.php")) or (root / "app" / "middleware.php").is_file():
+        if any(root.glob("app/**/http/middleware/*.php")) or any(root.glob("application/**/http/middleware/*.php")) or (root / "app" / "middleware.php").is_file():
             hints.append("middleware")
+        if (root / "thinkphp").is_dir() and (root / "application").is_dir():
+            hints.append("thinkphp5-layout")
         if (root / "composer.json").is_file():
             composer = (root / "composer.json").read_text(encoding="utf-8", errors="ignore").lower()
             if any(name in composer for name in ("thinkphp", "laravel", "symfony", "yii")):
