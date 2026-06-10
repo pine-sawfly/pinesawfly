@@ -58,7 +58,7 @@ class TaintAnalyzer:
         self.code_sinks = {"eval", "assert", "create_function"}
         self.command_sinks = {"system", "exec", "shell_exec", "passthru", "proc_open", "popen"}
         self.sql_sinks = {"mysql_query", "mysqli_query", "pg_query", "sqlite_query", "sqlite_exec"}
-        self.sql_methods = {"query", "exec", "fetch", "fetchall"}
+        self.sql_methods = {"query", "exec", "fetch", "fetchall", "get_one"}
         self.file_include_sinks = {"include", "include_once", "require", "require_once"}
         self.file_read_sinks = {"file_get_contents", "readfile", "file", "fopen"}
         self.file_sinks = self.file_include_sinks | self.file_read_sinks
@@ -95,6 +95,7 @@ class TaintAnalyzer:
         )
         self.variables: dict[str, ValueState] = {}
         self.results: list[dict[str, Any]] = []
+        self.validated_expression_stack: list[set[str]] = []
         self.source = b""
         self.file_path = ""
         self.started_at = 0.0
@@ -104,6 +105,7 @@ class TaintAnalyzer:
     def analyze(self, ast: PHPAst, file_path: str) -> list[dict[str, Any]]:
         self.variables = {}
         self.results = []
+        self.validated_expression_stack = []
         self.source = ast.source
         self.file_path = file_path
         self.started_at = time.perf_counter()
@@ -146,21 +148,15 @@ class TaintAnalyzer:
             variable = self._variable_key(left)
             if variable:
                 self._mark_callable_state(state)
-                existing = self.variables.get(variable)
-                if (
-                    existing
-                    and existing.tainted
-                    and not state.tainted
-                    and not self._is_sanitizer_call(right)
-                    and not self._is_sql_variable(variable)
-                ):
-                    state = existing.merge(state)
                 self.variables[variable] = state
                 self._check_sql_assignment(node, variable, right, state)
             access_key = self._access_key(left)
             if access_key:
                 self.variables[access_key] = state
             return state
+
+        if node.type == "if_statement":
+            return self._process_if_statement(node)
 
         if node.type == "function_call_expression":
             return self._eval_function_call(node)
@@ -192,6 +188,8 @@ class TaintAnalyzer:
             if self._is_uploaded_tmp_name_access(node):
                 return ValueState()
             access_key = self._access_key(node)
+            if access_key and self._is_validated_expression(access_key):
+                return ValueState()
             if access_key and access_key in self.variables:
                 return self.variables[access_key]
             if self._is_files_entry_access(node):
@@ -251,6 +249,26 @@ class TaintAnalyzer:
         for child in node.children:
             if child.is_named:
                 state = state.merge(self._eval_expr(child))
+        return state
+
+    def _process_if_statement(self, node: Node) -> ValueState:
+        condition = next((child for child in node.children if child.is_named and child.type == "parenthesized_expression"), None)
+        validated = self._validated_inputs_from_condition(condition)
+        state = self._eval_expr(condition) if condition else ValueState()
+        body_seen = False
+
+        for child in node.children:
+            if not child.is_named or child is condition:
+                continue
+            if child.type == "compound_statement" and not body_seen:
+                body_seen = True
+                self.validated_expression_stack.append(validated)
+                try:
+                    self._process_block(child)
+                finally:
+                    self.validated_expression_stack.pop()
+                continue
+            state = state.merge(self._process_node(child))
         return state
 
     def _eval_function_call(self, node: Node) -> ValueState:
@@ -426,7 +444,7 @@ class TaintAnalyzer:
     def _check_sql_assignment(self, node: Node, variable: str, right: Node | None, state: ValueState) -> None:
         if not right or not state.sql_template:
             return
-        if not state.tainted and "dynamic-sql-template" not in state.transforms:
+        if not state.tainted:
             return
         for item in (variable, self._text(right)):
             if item not in state.transforms:
@@ -451,7 +469,7 @@ class TaintAnalyzer:
     def _check_sql_sink(self, node: Node, name: str, argument_state: ValueState, arguments: list[Node]) -> None:
         if self._is_parameterized_query(arguments):
             return
-        if not argument_state.tainted and "dynamic-sql-template" not in argument_state.transforms:
+        if not argument_state.tainted:
             return
         escaped = any(transform in self.sql_escapers for transform in argument_state.transforms)
         if self._is_strong_sql_escaped(argument_state):
@@ -666,6 +684,30 @@ class TaintAnalyzer:
         method_name = self._member_method_name(node)
         return bool(method_name and method_name.lower() in self.validator_methods)
 
+    def _validated_inputs_from_condition(self, node: Node | None) -> set[str]:
+        if not node:
+            return set()
+        validated: set[str] = set()
+        if self._is_validator_call(node):
+            for argument in self._arguments(node):
+                key = self._normalized_expr(argument)
+                if key:
+                    validated.add(key)
+            return validated
+        for child in node.children:
+            if child.is_named:
+                validated.update(self._validated_inputs_from_condition(child))
+        return validated
+
+    def _is_validated_expression(self, expression: str) -> bool:
+        normalized = re.sub(r"\s+", "", expression)
+        return any(normalized in scope for scope in reversed(self.validated_expression_stack))
+
+    def _normalized_expr(self, node: Node | None) -> str | None:
+        if not node:
+            return None
+        return re.sub(r"\s+", "", self._text(node))
+
     def _is_request_input_call(self, node: Node, method_name: str) -> bool:
         method = method_name.lower()
         if method not in {"get", "post", "param", "request", "put", "delete", "patch", "input", "all", "file"}:
@@ -715,7 +757,7 @@ class TaintAnalyzer:
             if variable in self.superglobals:
                 return True
             state = self.variables.get(variable)
-            return state is None or state.tainted
+            return bool(state and state.tainted)
         if node.type in {"subscript_expression", "member_access_expression"}:
             state = self._eval_expr(node)
             if state.tainted:
