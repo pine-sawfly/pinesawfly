@@ -62,9 +62,9 @@
       "id": "PHP005",
       "name": "反序列化漏洞(unserialize)",
       "type": "REGEX",
-      "pattern": "\\bunserialize\\s*\\(",
+      "pattern": "\\bunserialize\\s*\\(\\s*(\\$_(GET|POST|REQUEST|COOKIE|FILES|SERVER)|\\$this->request->|request\\s*\\(|input\\s*\\()",
       "severity": "High",
-      "description": "检测到unserialize函数调用，可能存在反序列化漏洞",
+      "description": "检测到unserialize直接使用请求输入，可能存在反序列化漏洞；变量源头由污点分析判断",
       "enabled": true,
       "flags": [],
       "skipContexts": [

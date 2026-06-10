@@ -7,6 +7,7 @@ from core.exception_handler import safe_operation
 from core.plugin_interface import ScannerPluginInterface
 
 from .taint_analyzer import TaintAnalyzer
+from .route_auth_analyzer import ProjectContext, ProjectContextBuilder, RouteAuthAnalyzer
 
 if TYPE_CHECKING:
     from .php_parser import PHPParser
@@ -22,6 +23,8 @@ class PHPPlugin(ScannerPluginInterface):
         self._supported_languages = ["php"]
         self.parser: PHPParser | None = None
         self.taint_analyzer: TaintAnalyzer | None = None
+        self.project_context: ProjectContext | None = None
+        self.route_auth_analyzer: RouteAuthAnalyzer | None = None
         self.initialized = False
 
     @property
@@ -40,12 +43,14 @@ class PHPPlugin(ScannerPluginInterface):
     def supported_languages(self) -> list[str]:
         return self._supported_languages
 
-    def initialize(self) -> bool:
+    def initialize(self, project_path: str | None = None) -> bool:
         try:
             from .php_parser import PHPParser
 
             self.parser = PHPParser()
             self.taint_analyzer = TaintAnalyzer()
+            self.project_context = ProjectContextBuilder().build(project_path)
+            self.route_auth_analyzer = RouteAuthAnalyzer(self.project_context)
             self.initialized = True
             logger.info("PHP 插件 %s 初始化成功", self.name)
             return True
@@ -77,6 +82,8 @@ class PHPPlugin(ScannerPluginInterface):
             logger.info("开始扫描文件: %s", file_path)
             ast = self.parser.parse_file(file_path)
             results = self.taint_analyzer.analyze(ast, file_path)
+            if self.route_auth_analyzer:
+                results.extend(self.route_auth_analyzer.analyze(ast, file_path))
             logger.info("文件 %s 扫描完成，发现 %s 个问题", file_path, len(results))
             return results
         except Exception as exc:

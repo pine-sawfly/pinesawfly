@@ -50,6 +50,7 @@ class TaintAnalyzer:
         self.file_include_sinks = {"include", "include_once", "require", "require_once"}
         self.file_read_sinks = {"file_get_contents", "readfile", "file", "fopen"}
         self.file_sinks = self.file_include_sinks | self.file_read_sinks
+        self.deserialize_sinks = {"unserialize"}
         self.callback_sinks = {
             "call_user_func",
             "call_user_func_array",
@@ -70,8 +71,10 @@ class TaintAnalyzer:
             "hex2bin",
         }
         self.sanitizers = {"intval", "abs", "floatval", "boolval", "htmlspecialchars", "htmlentities", "filter_var"}
+        self.validator_methods = {"is_number", "is_letter", "is_rec", "get_legal_id"}
         self.sql_value_normalizers = {"md5", "sha1", "hash", "password_hash", "crc32"}
         self.sql_escapers = {"mysql_real_escape_string", "mysqli_real_escape_string", "addslashes"}
+        self.strong_sql_escapers = {"mysql_real_escape_string", "mysqli_real_escape_string"}
         self.dangerous_callable_names = self.code_sinks | self.command_sinks | {"preg_replace"}
         self.suspicious_command_pattern = re.compile(
             r"\b(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|whoami|id)\b|"
@@ -191,6 +194,9 @@ class TaintAnalyzer:
         if node.type == "assignment_expression":
             return self._process_node(node)
 
+        if node.type == "conditional_expression":
+            return self._eval_conditional_expression(node)
+
         if node.type == "cast_expression":
             cast_type = next((self._text(child).lower() for child in node.children if child.type == "cast_type"), "")
             if cast_type in {"int", "integer", "float", "double", "real", "bool", "boolean"}:
@@ -248,6 +254,16 @@ class TaintAnalyzer:
                 self._check_callback_sink(node, lowered, arguments)
             if lowered in self.sanitizers:
                 return ValueState()
+            if lowered in self.deserialize_sinks and argument_state.tainted:
+                self._add_result(
+                    node,
+                    "PHP_UNSERIALIZE_TAINT",
+                    "用户输入进入反序列化",
+                    "High",
+                    f"unserialize 参数来自 {', '.join(argument_state.sources) or '用户输入'}",
+                    argument_state,
+                    self._text(node),
+                )
             if lowered in self.sql_value_normalizers:
                 return ValueState()
             if lowered in self.decode_functions:
@@ -300,6 +316,8 @@ class TaintAnalyzer:
         argument_state = self._merge_states(self._eval_expr(argument) for argument in arguments)
         if method_name and self._is_request_input_call(node, method_name):
             return ValueState(tainted=True, sources=[self._text(node)], transforms=[f"request->{method_name}"])
+        if method_name and method_name.lower() in self.validator_methods:
+            return ValueState(transforms=[method_name.lower()])
         if method_name and method_name.lower() in self.sql_methods:
             self._check_sql_sink(node, f"->{method_name}", argument_state, arguments)
             return ValueState()
@@ -319,6 +337,15 @@ class TaintAnalyzer:
                 self._text(node),
             )
         return state
+
+    def _eval_conditional_expression(self, node: Node) -> ValueState:
+        named = [child for child in node.children if child.is_named]
+        if len(named) >= 3 and self._is_validator_call(named[0]):
+            fallback_state = self._eval_expr(named[2])
+            if not fallback_state.tainted:
+                method = self._member_method_name(named[0]) or "validator"
+                return ValueState(transforms=[method.lower()])
+        return self._merge_states(self._eval_expr(child) for child in named)
 
     def _check_named_sink(self, node: Node, name: str, arguments: list[Node], argument_state: ValueState) -> None:
         if name in self.code_sinks and argument_state.tainted:
@@ -393,6 +420,8 @@ class TaintAnalyzer:
             if item not in state.transforms:
                 state.transforms.append(item)
         escaped = any(transform in self.sql_escapers for transform in state.transforms)
+        if self._is_strong_sql_escaped(state):
+            return
         source = ", ".join(state.sources) or "动态变量"
         description = f"变量 {variable} 被赋值为包含 {source} 的动态 SQL 模板"
         if escaped:
@@ -413,6 +442,8 @@ class TaintAnalyzer:
         if not argument_state.tainted and "dynamic-sql-template" not in argument_state.transforms:
             return
         escaped = any(transform in self.sql_escapers for transform in argument_state.transforms)
+        if self._is_strong_sql_escaped(argument_state):
+            return
         source = ", ".join(argument_state.sources) or "动态 SQL"
         description = f"SQL 查询函数 {name} 的 SQL 参数来自 {source}"
         if escaped:
@@ -617,12 +648,23 @@ class TaintAnalyzer:
                 return self._text(child)
         return None
 
+    def _is_validator_call(self, node: Node) -> bool:
+        if node.type != "member_call_expression":
+            return False
+        method_name = self._member_method_name(node)
+        return bool(method_name and method_name.lower() in self.validator_methods)
+
     def _is_request_input_call(self, node: Node, method_name: str) -> bool:
         method = method_name.lower()
         if method not in {"get", "post", "param", "request", "put", "delete", "patch", "input", "all", "file"}:
             return False
         text = self._text(node).lower()
         return "request" in text or "input(" in text
+
+    def _is_strong_sql_escaped(self, state: ValueState) -> bool:
+        strong = any(transform in self.strong_sql_escapers for transform in state.transforms)
+        weak = any(transform == "addslashes" for transform in state.transforms)
+        return strong and not weak
 
     def _is_sanitizer_call(self, node: Node | None) -> bool:
         if not node or node.type != "function_call_expression":

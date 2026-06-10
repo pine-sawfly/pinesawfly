@@ -174,7 +174,7 @@ class ScanWorker(QObject):
             if not php_plugin_module:
                 return
             php_plugin = php_plugin_module.PluginInterface()
-            if not php_plugin.initialize():
+            if not php_plugin.initialize(str(project)):
                 return
             for php_file in project.rglob("*.php"):
                 if is_ignored_path(php_file):
