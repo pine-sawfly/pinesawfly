@@ -4,6 +4,7 @@ import base64
 import binascii
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,6 +14,8 @@ from core.exception_handler import safe_operation
 from .php_parser import PHPAst
 
 logger = logging.getLogger(__name__)
+MAX_ANALYSIS_SECONDS = 6.0
+MAX_ANALYSIS_NODES = 50000
 
 
 @dataclass
@@ -79,6 +82,8 @@ class TaintAnalyzer:
         self.results: list[dict[str, Any]] = []
         self.source = b""
         self.file_path = ""
+        self.started_at = 0.0
+        self.visited_nodes = 0
 
     @safe_operation
     def analyze(self, ast: PHPAst, file_path: str) -> list[dict[str, Any]]:
@@ -86,18 +91,33 @@ class TaintAnalyzer:
         self.results = []
         self.source = ast.source
         self.file_path = file_path
-        self._process_block(ast.tree.root_node)
+        self.started_at = time.perf_counter()
+        self.visited_nodes = 0
+        try:
+            self._process_block(ast.tree.root_node)
+        except TimeoutError as exc:
+            logger.warning("跳过文件 %s: %s", file_path, exc)
+            return []
         self.results = self._dedupe_results(self.results)
         logger.info("污点分析在文件 %s 中发现 %s 个问题", file_path, len(self.results))
         return self.results
 
+    def _check_budget(self) -> None:
+        self.visited_nodes += 1
+        if self.visited_nodes > MAX_ANALYSIS_NODES:
+            raise TimeoutError(f"污点分析节点数超过限制: {MAX_ANALYSIS_NODES}")
+        if self.started_at and time.perf_counter() - self.started_at > MAX_ANALYSIS_SECONDS:
+            raise TimeoutError(f"污点分析超过 {MAX_ANALYSIS_SECONDS:.0f} 秒")
+
     def _process_block(self, node: Node) -> None:
+        self._check_budget()
         for child in node.children:
             if child.type in {"php_tag", ";", ","}:
                 continue
             self._process_node(child)
 
     def _process_node(self, node: Node) -> ValueState:
+        self._check_budget()
         if node.type == "expression_statement":
             state = ValueState()
             for child in node.children:
@@ -143,6 +163,7 @@ class TaintAnalyzer:
         return state
 
     def _eval_expr(self, node: Node | None) -> ValueState:
+        self._check_budget()
         if node is None:
             return ValueState()
 
@@ -277,6 +298,8 @@ class TaintAnalyzer:
         arguments = self._arguments(node)
         method_name = self._member_method_name(node)
         argument_state = self._merge_states(self._eval_expr(argument) for argument in arguments)
+        if method_name and self._is_request_input_call(node, method_name):
+            return ValueState(tainted=True, sources=[self._text(node)], transforms=[f"request->{method_name}"])
         if method_name and method_name.lower() in self.sql_methods:
             self._check_sql_sink(node, f"->{method_name}", argument_state, arguments)
             return ValueState()
@@ -593,6 +616,13 @@ class TaintAnalyzer:
             if child.type == "name":
                 return self._text(child)
         return None
+
+    def _is_request_input_call(self, node: Node, method_name: str) -> bool:
+        method = method_name.lower()
+        if method not in {"get", "post", "param", "request", "put", "delete", "patch", "input", "all", "file"}:
+            return False
+        text = self._text(node).lower()
+        return "request" in text or "input(" in text
 
     def _is_sanitizer_call(self, node: Node | None) -> bool:
         if not node or node.type != "function_call_expression":

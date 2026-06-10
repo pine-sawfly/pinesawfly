@@ -29,7 +29,15 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".php", ".py", ".java", ".lua", ".go", ".js", ".ts", ".html", ".css"}
 SCAN_EXTENSIONS = {".php", ".py", ".java"}
-IGNORED_DIRS = {".git", ".venv", ".codegraph", "__pycache__", ".mypy_cache", ".pytest_cache"}
+ALWAYS_IGNORED_DIRS = {
+    ".git",
+    ".venv",
+    ".codegraph",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+}
+DEPENDENCY_DIRS = {"vendor", "node_modules", "bower_components"}
 SNIPPET_LANGUAGES = {
     ".php": "php",
     ".py": "python",
@@ -93,6 +101,24 @@ def normalize_path(path_or_url: str) -> str:
     return path_or_url
 
 
+def is_ignored_path(path: Path) -> bool:
+    if any(part in ALWAYS_IGNORED_DIRS for part in path.parts):
+        return True
+    return any(_is_dependency_dir(parent) for parent in (path, *path.parents))
+
+
+def _is_dependency_dir(path: Path) -> bool:
+    if path.name not in DEPENDENCY_DIRS:
+        return False
+    if path.name == "vendor":
+        return (path / "autoload.php").exists() or (path / "composer").is_dir() or (path.parent / "composer.json").is_file()
+    if path.name == "node_modules":
+        return (path.parent / "package.json").is_file()
+    if path.name == "bower_components":
+        return (path.parent / "bower.json").is_file()
+    return False
+
+
 class ScanWorker(QObject):
     finished = Signal(list, int, str)
     failed = Signal(str)
@@ -116,7 +142,7 @@ class ScanWorker(QObject):
         results: list[dict[str, object]] = []
         self._prepare_codegraph(project)
         for file_path in project.rglob("*"):
-            if any(part in IGNORED_DIRS for part in file_path.parts):
+            if is_ignored_path(file_path):
                 continue
             if file_path.is_file() and file_path.suffix.lower() in SCAN_EXTENSIONS:
                 for vuln in rule_engine.scan_file(str(file_path)):
@@ -151,7 +177,7 @@ class ScanWorker(QObject):
             if not php_plugin.initialize():
                 return
             for php_file in project.rglob("*.php"):
-                if any(part in IGNORED_DIRS for part in php_file.parts):
+                if is_ignored_path(php_file):
                     continue
                 for vuln in php_plugin.scan(str(php_file)):
                     results.append(self._normalize_vuln(project, php_file, vuln))
@@ -269,7 +295,7 @@ class AuditBridge(QObject):
         root = Path(project_path)
         files: list[dict[str, object]] = []
         for item in sorted(root.rglob("*")):
-            if any(part in IGNORED_DIRS for part in item.parts):
+            if is_ignored_path(item):
                 continue
             if item.is_file() and item.suffix.lower() in SUPPORTED_EXTENSIONS:
                 files.append({
