@@ -9,21 +9,21 @@ QtObject {
     property int revision: 0
     property var color: manager ? manager.currentScheme : fallbackScheme
     property var fallbackScheme: ({
-        primary: "#6750A4",
+        primary: "#006A60",
         onPrimary: "#FFFFFF",
-        primaryContainer: "#EADDFF",
-        onPrimaryContainer: "#21005D",
-        secondary: "#625B71",
+        primaryContainer: "#9FF2E5",
+        onPrimaryContainer: "#00201C",
+        secondary: "#4A635F",
         onSecondary: "#FFFFFF",
-        surface: "#FFFBFE",
-        surfaceContainer: "#F3EDF7",
-        surfaceContainerHigh: "#ECE6F0",
-        surfaceVariant: "#E7E0EC",
+        surface: "#F4FFFC",
+        surfaceContainer: "#DCEDEA",
+        surfaceContainerHigh: "#D1E5E1",
+        surfaceVariant: "#DAE5E1",
         onSurface: "#1D1B20",
         onSurfaceVariant: "#49454F",
         outline: "#79747E",
         outlineVariant: "#CAC4D0",
-        background: "#FFFBFE",
+        background: "#F4FFFC",
         error: "#B3261E",
         onError: "#FFFFFF"
     })
