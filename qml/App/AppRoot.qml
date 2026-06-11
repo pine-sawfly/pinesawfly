@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
+import Qt5Compat.GraphicalEffects
 import "../Core/Styles" as Styles
 import "../Core/Controls" as MD
 
@@ -15,6 +16,13 @@ Rectangle {
     property bool drawerCollapsed: false
     property int drawerExpandedWidth: 272
     property int drawerCollapsedWidth: 72
+    property color pendingSeedColor: "#006A60"
+    property real themeWaveStartX: 0
+    property real themeWaveStartY: 0
+    property real themeMaskRadius: 0
+    property real themeMaskMaxRadius: 0
+    property url themeMaskImage: ""
+    property bool themeMaskPending: false
     property var pages: [
         { label: "首页", icon: "home", source: "pages/HomePage.qml" },
         { label: "插件", icon: "extension", source: "pages/ComponentsPage.qml" },
@@ -26,6 +34,29 @@ Rectangle {
         { label: "关于", icon: "info", source: "pages/AboutPage.qml" }
     ]
 
+    function playThemeWave(seedColor, sourceItem, localX, localY) {
+        var point = sourceItem.mapToItem(root, localX, localY)
+        pendingSeedColor = seedColor
+        themeWaveStartX = point.x
+        themeWaveStartY = point.y
+        themeMaskMaxRadius = Math.max(
+                    Math.sqrt(point.x * point.x + point.y * point.y),
+                    Math.sqrt((width - point.x) * (width - point.x) + point.y * point.y),
+                    Math.sqrt(point.x * point.x + (height - point.y) * (height - point.y)),
+                    Math.sqrt((width - point.x) * (width - point.x) + (height - point.y) * (height - point.y)))
+        themeMaskRadius = 0
+        themeMaskPending = true
+        root.grabToImage(function(result) {
+            themeMaskImage = result.url
+            oldThemeImage.source = themeMaskImage
+            themeTransitionLayer.visible = true
+            if (styleManager)
+                styleManager.setSeedColor(root.pendingSeedColor)
+            themeMaskPending = false
+            themeMaskAnimation.restart()
+        })
+    }
+
     FolderDialog {
         id: folderDialog
         title: "选择项目目录"
@@ -33,6 +64,7 @@ Rectangle {
     }
 
     Row {
+        id: appContent
         anchors.fill: parent
 
         Rectangle {
@@ -143,10 +175,13 @@ Rectangle {
                     Repeater {
                         model: root.pages
                         delegate: Rectangle {
+                            id: navItem
                             width: parent.width
                             height: 44
                             radius: 22
-                            color: root.currentIndex === index ? Styles.Theme.color.primaryContainer : "transparent"
+                            color: root.currentIndex === index
+                                   ? Styles.Theme.color.primaryContainer
+                                   : (navMouse.containsMouse ? Styles.Theme.color.surfaceContainerHigh : "transparent")
 
                             Row {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -172,7 +207,9 @@ Rectangle {
                             }
 
                             MouseArea {
+                                id: navMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.currentIndex = index
                             }
@@ -239,8 +276,10 @@ Rectangle {
                 source: root.pages[root.currentIndex].source
 
                 onLoaded: {
-                    if (item && item.hasOwnProperty("bridge"))
-                        item.bridge = root.bridge
+                    if (item) {
+                        try { item.bridge = root.bridge } catch (error) {}
+                        try { item.themeHost = root } catch (error) {}
+                    }
                     item.opacity = 0
                     item.y = 14
                     transitionIn.restart()
@@ -251,6 +290,64 @@ Rectangle {
                 id: transitionIn
                 NumberAnimation { target: pageLoader.item; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
                 NumberAnimation { target: pageLoader.item; property: "y"; to: 0; duration: 180; easing.type: Easing.OutCubic }
+            }
+        }
+    }
+
+    Item {
+        id: themeTransitionLayer
+        anchors.fill: parent
+        visible: false
+        z: 1000
+
+        Image {
+            id: oldThemeImage
+            anchors.fill: parent
+            fillMode: Image.Stretch
+            cache: false
+        }
+
+        OpacityMask {
+            anchors.fill: parent
+            cached: false
+            source: ShaderEffectSource {
+                sourceItem: appContent
+                live: true
+                hideSource: false
+            }
+            maskSource: Item {
+                width: root.width
+                height: root.height
+
+                Rectangle {
+                    width: root.themeMaskRadius * 2
+                    height: width
+                    radius: width / 2
+                    x: root.themeWaveStartX - root.themeMaskRadius
+                    y: root.themeWaveStartY - root.themeMaskRadius
+                    color: "black"
+                    visible: root.themeMaskRadius > 0
+                }
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: themeMaskAnimation
+        NumberAnimation {
+            target: root
+            property: "themeMaskRadius"
+            to: root.themeMaskMaxRadius
+            duration: 620
+            easing.type: Easing.OutCubic
+        }
+
+        ScriptAction {
+            script: {
+                themeTransitionLayer.visible = false
+                oldThemeImage.source = ""
+                root.themeMaskImage = ""
+                root.themeMaskRadius = 0
             }
         }
     }

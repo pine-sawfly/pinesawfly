@@ -3,11 +3,13 @@ import "../../Core/Styles" as Styles
 import "../../Core/Controls" as MD
 
 PageFrame {
+    id: root
     title: "Settings"
 
     property var seeds: ["#006A60", "#6750A4", "#8C1D18", "#00639B"]
     property var availableFonts: []
     property var style: styleManager
+    property var themeHost: null
 
     MD.Card {
         width: 520
@@ -50,7 +52,12 @@ PageFrame {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: if (style) style.setSeedColor(modelData)
+                        onClicked: function(mouse) {
+                            if (root.themeHost)
+                                root.themeHost.playThemeWave(modelData, parent, mouse.x, mouse.y)
+                            else if (style)
+                                style.setSeedColor(modelData)
+                        }
                     }
                 }
             }

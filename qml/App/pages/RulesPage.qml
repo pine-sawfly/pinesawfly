@@ -89,44 +89,88 @@ PageFrame {
 
         Item { width: 1; height: 6 }
 
-        Row {
+        Item {
             id: descriptionRow
             width: parent.width
-            spacing: 12
+            height: 40
+            property int gap: 12
 
             MD.TextField {
                 id: descriptionField
-                width: Math.max(260, parent.width - saveRuleButton.width - (cancelEditButton.visible ? cancelEditButton.width + descriptionRow.spacing : 0) - descriptionRow.spacing)
+                width: Math.max(260, parent.width - actionGroup.width - descriptionRow.gap)
+                height: parent.height
                 dense: true
                 placeholderText: "规则描述"
-            }
 
-            MD.Button {
-                id: saveRuleButton
-                width: 120
-                text: editing ? "保存" : "新增"
-                icon: editing ? "save" : "add"
-                onClicked: {
-                    if (!rulesBridge)
-                        return
-                    if (editing) {
-                        if (rulesBridge.updateRule(editingKey, ruleLanguage, ruleIdField.text, ruleNameField.text, patternField.text, ruleSeverity, descriptionField.text))
-                            clearForm()
-                    } else {
-                        if (rulesBridge.addRule(ruleLanguage, ruleIdField.text, ruleNameField.text, patternField.text, ruleSeverity, descriptionField.text))
-                            clearForm()
-                    }
+                Behavior on width {
+                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
                 }
             }
 
-            MD.Button {
-                id: cancelEditButton
-                visible: editing
-                width: 86
-                text: "取消"
-                icon: "close"
-                type: "outlined"
-                onClicked: clearForm()
+            Item {
+                id: actionGroup
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: parent.height
+                width: editing ? 218 : 120
+                clip: true
+
+                Behavior on width {
+                    NumberAnimation { duration: 40; easing.type: Easing.OutCubic }
+                }
+
+                Row {
+                    id: buttonsRow
+                    spacing: 12
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    MD.Button {
+                        id: saveRuleButton
+                        text: "保存"
+                        icon: "save"
+                        width: editing ? 120 : 0
+                        opacity: editing ? 1 : 0
+                        scale: editing ? 1 : 0.92
+                        enabled: editing
+                        onClicked: {
+                            if (rulesBridge && rulesBridge.updateRule(editingKey, ruleLanguage, ruleIdField.text, ruleNameField.text, patternField.text, ruleSeverity, descriptionField.text))
+                                clearForm()
+                        }
+                        Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: 210; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                    }
+
+                    MD.Button {
+                        id: cancelEditButton
+                        text: "取消"
+                        icon: "close"
+                        type: "outlined"
+                        width: editing ? 86 : 0
+                        opacity: editing ? 1 : 0
+                        enabled: editing
+                        onClicked: clearForm()
+                        Behavior on width { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: 190; easing.type: Easing.OutCubic } }
+                    }
+
+                    MD.Button {
+                        id: addRuleButton
+                        text: "新增"
+                        icon: "add"
+                        width: editing ? 0 : 120
+                        opacity: editing ? 0 : 1
+                        scale: editing ? 0 : 1
+                        enabled: !editing
+                        onClicked: {
+                            if (rulesBridge && rulesBridge.addRule(ruleLanguage, ruleIdField.text, ruleNameField.text, patternField.text, ruleSeverity, descriptionField.text))
+                                clearForm()
+                        }
+                        Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.InOutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.InOutCubic } }
+                    }
+                }
             }
         }
 
