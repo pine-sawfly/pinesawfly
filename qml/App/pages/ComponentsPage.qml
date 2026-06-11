@@ -7,6 +7,8 @@ PageFrame {
     title: "插件"
 
     property var bridge: auditBridge
+    property int pluginCardWidth: 252
+    property int pluginCardHeight: 154
 
     Popup {
         id: aiConfigPopup
@@ -197,8 +199,8 @@ PageFrame {
         spacing: 12
 
         MD.Card {
-            width: 252
-            height: 154
+            width: pluginCardWidth
+            height: pluginCardHeight
 
             Column {
                 width: parent.width
@@ -240,7 +242,7 @@ PageFrame {
                     Text {
                         width: parent.width - dependencySwitch.width - 10
                         height: 32
-                        text: "审计第三方依赖"
+                        text: "审计依赖"
                         verticalAlignment: Text.AlignVCenter
                         font.family: Styles.Theme.typography.family
                         font.pixelSize: 13
@@ -259,8 +261,8 @@ PageFrame {
         }
 
         MD.Card {
-            width: 252
-            height: 132
+            width: pluginCardWidth
+            height: pluginCardHeight
 
             Column {
                 width: parent.width

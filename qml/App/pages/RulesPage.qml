@@ -90,17 +90,19 @@ PageFrame {
         Item { width: 1; height: 6 }
 
         Row {
+            id: descriptionRow
             width: parent.width
             spacing: 12
 
             MD.TextField {
                 id: descriptionField
-                width: Math.max(360, parent.width - 136)
+                width: Math.max(260, parent.width - saveRuleButton.width - (cancelEditButton.visible ? cancelEditButton.width + descriptionRow.spacing : 0) - descriptionRow.spacing)
                 dense: true
                 placeholderText: "规则描述"
             }
 
             MD.Button {
+                id: saveRuleButton
                 width: 120
                 text: editing ? "保存" : "新增"
                 icon: editing ? "save" : "add"
@@ -118,6 +120,7 @@ PageFrame {
             }
 
             MD.Button {
+                id: cancelEditButton
                 visible: editing
                 width: 86
                 text: "取消"

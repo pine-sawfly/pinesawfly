@@ -282,6 +282,8 @@ class TaintAnalyzer:
             self._check_named_sink(node, lowered, arguments, argument_state)
             if lowered in self.callback_sinks:
                 self._check_callback_sink(node, lowered, arguments)
+            if lowered == "cookie" and len(arguments) == 1:
+                return ValueState(tainted=True, sources=[self._text(node)], transforms=["cookie"])
             if lowered in self.sanitizers:
                 return ValueState()
             if lowered in self.deserialize_sinks and argument_state.tainted:

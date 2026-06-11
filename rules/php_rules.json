@@ -141,6 +141,20 @@
         "string",
         "comment"
       ]
+    },
+    {
+      "id": "PHP011",
+      "name": "反序列化 POP Gadget 候选魔术方法",
+      "type": "REGEX",
+      "pattern": "function\\s+__(wakeup|destruct|toString|call|callStatic|get|set|invoke|unserialize)\\s*\\([^)]*\\)\\s*\\{",
+      "severity": "High",
+      "description": "检测到 PHP 魔术方法，可能作为反序列化 POP 链 gadget 候选；该规则偏向不漏报，需要结合 unserialize 入口、属性可控性和方法体人工复核",
+      "enabled": true,
+      "flags": [],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
     }
   ]
 }

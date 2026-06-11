@@ -190,24 +190,75 @@ class ScanWorker(QObject):
             logger.exception("plugin scan failed")
 
     def _dedupe_results(self, results: list[dict[str, object]]) -> list[dict[str, object]]:
-        seen: set[tuple[object, ...]] = set()
-        unique: list[dict[str, object]] = []
+        unique_by_key: dict[tuple[object, ...], dict[str, object]] = {}
         for result in results:
-            key = (
-                result.get("ruleId"),
-                result.get("absolutePath"),
-                result.get("line"),
-                result.get("match"),
-                result.get("description"),
-            )
-            if key in seen:
+            key = self._result_fingerprint(result)
+            existing = unique_by_key.get(key)
+            if not existing:
+                unique_by_key[key] = result
                 continue
-            seen.add(key)
-            unique.append(result)
-        return unique
+            if self._result_rank(result) > self._result_rank(existing):
+                unique_by_key[key] = result
+        return list(unique_by_key.values())
+
+    def _result_fingerprint(self, result: dict[str, object]) -> tuple[object, ...]:
+        match = self._normalize_match_text(str(result.get("match") or ""))
+        if not match:
+            match = self._normalize_match_text(str(result.get("description") or ""))
+        return (
+            result.get("absolutePath"),
+            result.get("line"),
+            self._result_family(result),
+            match,
+        )
+
+    def _normalize_match_text(self, value: str) -> str:
+        value = re.sub(r"\s+", " ", value).strip()
+        return value[:240]
+
+    def _result_rank(self, result: dict[str, object]) -> tuple[int, int]:
+        severity_rank = {
+            "Critical": 4,
+            "High": 3,
+            "Medium": 2,
+            "Low": 1,
+            "Info": 0,
+        }.get(str(result.get("severity") or ""), 0)
+        result_type = str(result.get("type") or "")
+        type_rank = {
+            "TaintAnalysis": 4,
+            "RouteAuthAnalysis": 3,
+            "ASTAnalysis": 2,
+            "StaticAnalysis": 1,
+        }.get(result_type, 0)
+        rule_id = str(result.get("ruleId") or "")
+        if rule_id.endswith("_TAINT") or "_TAINT" in rule_id:
+            type_rank = max(type_rank, 4)
+        return severity_rank, type_rank
+
+    def _result_family(self, result: dict[str, object]) -> str:
+        rule_id = str(result.get("ruleId") or "").upper()
+        rule_name = str(result.get("ruleName") or "").upper()
+        text = f"{rule_id} {rule_name}"
+        families = {
+            "SQL": ("SQL", "MYSQL", "PDO", "QUERY"),
+            "COMMAND": ("COMMAND", "EXEC", "SYSTEM", "SHELL", "命令"),
+            "CODE_EXEC": ("CODE_EXEC", "EVAL", "ASSERT", "PREG_REPLACE", "代码执行"),
+            "FILE": ("FILE", "INCLUDE", "READ", "UPLOAD", "文件"),
+            "DESERIALIZE": ("UNSERIALIZE", "DESERIAL", "反序列化"),
+            "CALLBACK": ("CALLBACK", "CALL_USER_FUNC", "动态函数"),
+            "XSS": ("XSS", "CROSS_SITE", "跨站"),
+            "SSRF": ("SSRF", "CURL", "URL"),
+            "AUTH": ("AUTH", "ACCESS", "鉴权", "访问控制"),
+        }
+        for family, markers in families.items():
+            if any(marker in text for marker in markers):
+                return family
+        return rule_id or "UNKNOWN"
 
     def _normalize_vuln(self, project: Path, file_path: Path, vuln: dict) -> dict[str, object]:
         return {
+            "type": vuln.get("type", ""),
             "ruleId": vuln.get("rule_id", "未知"),
             "ruleName": vuln.get("rule_name", "未知规则"),
             "severity": vuln.get("severity", "未知"),
