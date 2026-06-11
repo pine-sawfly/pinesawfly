@@ -134,13 +134,20 @@ class ScanWorker(QObject):
         return list(unique_by_key.values())
 
     def _result_fingerprint(self, result: dict[str, object]) -> tuple[object, ...]:
+        family = self._result_family(result)
+        if family in {"SQL", "COMMAND", "CODE_EXEC", "FILE", "DESERIALIZE", "CALLBACK"}:
+            return (
+                result.get("absolutePath"),
+                result.get("line"),
+                family,
+            )
         match = self._normalize_match_text(str(result.get("match") or ""))
         if not match:
             match = self._normalize_match_text(str(result.get("description") or ""))
         return (
             result.get("absolutePath"),
             result.get("line"),
-            self._result_family(result),
+            family,
             match,
         )
 
@@ -174,8 +181,8 @@ class ScanWorker(QObject):
         text = f"{rule_id} {rule_name}"
         families = {
             "SQL": ("SQL", "MYSQL", "PDO", "QUERY"),
-            "COMMAND": ("COMMAND", "EXEC", "SYSTEM", "SHELL", "命令"),
             "CODE_EXEC": ("CODE_EXEC", "EVAL", "ASSERT", "PREG_REPLACE", "代码执行"),
+            "COMMAND": ("COMMAND", "EXEC", "SYSTEM", "SHELL", "命令"),
             "FILE": ("FILE", "INCLUDE", "READ", "UPLOAD", "文件"),
             "DESERIALIZE": ("UNSERIALIZE", "DESERIAL", "反序列化"),
             "CALLBACK": ("CALLBACK", "CALL_USER_FUNC", "动态函数"),

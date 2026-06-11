@@ -127,7 +127,7 @@ PageFrame {
                     width: parent.width
                     model: templateFormatOptions
                     currentText: "Markdown"
-                    onActivated: loadTemplate(text)
+                    onActivated: function(text) { loadTemplate(text) }
                 }
 
                 Text {

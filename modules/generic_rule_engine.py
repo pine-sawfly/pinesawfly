@@ -49,6 +49,7 @@ class GenericRuleEngine:
             "description": rule.get("description", ""),
             "flags": rule.get("flags", []),
             "skipContexts": rule.get("skipContexts", []),
+            "scanFullFile": bool(rule.get("scanFullFile", False)),
         }
 
     def get_rules_by_language(self, language: str) -> list[dict[str, Any]]:
@@ -86,7 +87,7 @@ class GenericRuleEngine:
         content: str,
         rule: dict[str, Any],
         file_path: str,
-        ignored_spans: list[tuple[int, int]],
+        ignored_spans: list[tuple[int, int, str]],
     ) -> list[dict[str, Any]]:
         if rule.get("type", "REGEX") != "REGEX":
             return []
@@ -112,30 +113,35 @@ class GenericRuleEngine:
             })
         return results
 
-    def _ignored_spans(self, content: str, language: str) -> list[tuple[int, int]]:
+    def _ignored_spans(self, content: str, language: str) -> list[tuple[int, int, str]]:
         if language != "php":
             return []
         return self._php_ignored_spans(content)
 
-    def _should_skip_match(self, start: int, rule: dict[str, Any], ignored_spans: list[tuple[int, int]]) -> bool:
+    def _should_skip_match(self, start: int, rule: dict[str, Any], ignored_spans: list[tuple[int, int, str]]) -> bool:
+        if rule.get("scanFullFile"):
+            return False
+        if any(span_start <= start < span_end and context == "outside_php" for span_start, span_end, context in ignored_spans):
+            return True
         if not rule.get("skipContexts"):
             return False
-        return any(span_start <= start < span_end for span_start, span_end in ignored_spans)
+        contexts = set(rule.get("skipContexts") or [])
+        return any(span_start <= start < span_end and context in contexts for span_start, span_end, context in ignored_spans)
 
-    def _php_ignored_spans(self, content: str) -> list[tuple[int, int]]:
+    def _php_ignored_spans(self, content: str) -> list[tuple[int, int, str]]:
         code_spans = self._php_code_spans(content)
         if not code_spans:
-            return self._php_string_comment_spans(content, 0, len(content))
+            return [(0, len(content), "outside_php")]
 
-        ignored: list[tuple[int, int]] = []
+        ignored: list[tuple[int, int, str]] = []
         cursor = 0
         for start, end in code_spans:
             if cursor < start:
-                ignored.append((cursor, start))
+                ignored.append((cursor, start, "outside_php"))
             ignored.extend(self._php_string_comment_spans(content, start, end))
             cursor = end
         if cursor < len(content):
-            ignored.append((cursor, len(content)))
+            ignored.append((cursor, len(content), "outside_php"))
         return ignored
 
     def _php_code_spans(self, content: str) -> list[tuple[int, int]]:
@@ -148,8 +154,8 @@ class GenericRuleEngine:
             spans.append((start, end))
         return spans
 
-    def _php_string_comment_spans(self, content: str, start: int, end: int) -> list[tuple[int, int]]:
-        spans: list[tuple[int, int]] = []
+    def _php_string_comment_spans(self, content: str, start: int, end: int) -> list[tuple[int, int, str]]:
+        spans: list[tuple[int, int, str]] = []
         i = start
         while i < end:
             char = content[i]
@@ -166,27 +172,27 @@ class GenericRuleEngine:
                         i += 1
                         break
                     i += 1
-                spans.append((span_start, min(i, end)))
+                spans.append((span_start, min(i, end), "string"))
                 continue
             if char == "/" and next_char == "/":
                 span_start = i
                 i = content.find("\n", i + 2)
                 if i == -1 or i > end:
                     i = end
-                spans.append((span_start, i))
+                spans.append((span_start, i, "comment"))
                 continue
             if char == "#":
                 span_start = i
                 i = content.find("\n", i + 1)
                 if i == -1 or i > end:
                     i = end
-                spans.append((span_start, i))
+                spans.append((span_start, i, "comment"))
                 continue
             if char == "/" and next_char == "*":
                 span_start = i
                 block_end = content.find("*/", i + 2)
                 i = end if block_end == -1 or block_end > end else block_end + 2
-                spans.append((span_start, i))
+                spans.append((span_start, i, "comment"))
                 continue
             i += 1
         return spans

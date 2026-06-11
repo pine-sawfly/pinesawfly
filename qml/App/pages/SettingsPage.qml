@@ -69,7 +69,7 @@ PageFrame {
             placeholderText: "例如 Microsoft YaHei UI"
             useCurrentFontPreview: true
             onAboutToOpen: if (availableFonts.length === 0) availableFonts = Qt.fontFamilies().sort()
-            onActivated: if (style) style.setUiFontFamily(text)
+            onActivated: function(text) { if (style) style.setUiFontFamily(text) }
         }
 
         Text {
@@ -85,7 +85,7 @@ PageFrame {
             placeholderText: "例如 JetBrains Mono"
             useCurrentFontPreview: true
             onAboutToOpen: if (availableFonts.length === 0) availableFonts = Qt.fontFamilies().sort()
-            onActivated: if (style) style.setEditorFontFamily(text)
+            onActivated: function(text) { if (style) style.setEditorFontFamily(text) }
         }
     }
 }

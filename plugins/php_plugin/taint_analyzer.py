@@ -55,6 +55,18 @@ class ValueState:
 class TaintAnalyzer:
     def __init__(self):
         self.superglobals = {"$_GET", "$_POST", "$_REQUEST", "$_COOKIE", "$_SERVER", "$_FILES"}
+        self.client_server_keys = {
+            "HTTP_HOST",
+            "HTTP_USER_AGENT",
+            "HTTP_REFERER",
+            "HTTP_ORIGIN",
+            "HTTP_X_FORWARDED_FOR",
+            "HTTP_X_REAL_IP",
+            "HTTP_CLIENT_IP",
+            "HTTP_ACCEPT_LANGUAGE",
+            "QUERY_STRING",
+            "REQUEST_URI",
+        }
         self.code_sinks = {"eval", "assert", "create_function"}
         self.command_sinks = {"system", "exec", "shell_exec", "passthru", "proc_open", "popen"}
         self.sql_sinks = {"mysql_query", "mysqli_query", "pg_query", "sqlite_query", "sqlite_exec"}
@@ -152,17 +164,30 @@ class TaintAnalyzer:
                 self._check_sql_assignment(node, variable, right, state)
             access_key = self._access_key(left)
             if access_key:
+                self._check_session_assignment(node, access_key, state)
                 self.variables[access_key] = state
             return state
 
         if node.type == "if_statement":
             return self._process_if_statement(node)
 
+        if node.type == "switch_statement":
+            return self._process_switch_statement(node)
+
+        if node.type in {"case_statement", "default_statement"}:
+            return self._process_case_statement(node)
+
         if node.type == "function_call_expression":
             return self._eval_function_call(node)
 
         if node.type == "member_call_expression":
             return self._eval_member_call(node)
+
+        if node.type == "echo_statement":
+            return self._eval_output_statement(node, "echo")
+
+        if node.type == "print_intrinsic":
+            return self._eval_output_statement(node, "print")
 
         if node.type in {"include_expression", "include_once_expression", "require_expression", "require_once_expression"}:
             return self._eval_include_expression(node)
@@ -185,13 +210,17 @@ class TaintAnalyzer:
             return self.variables.get(variable, ValueState())
 
         if node.type == "subscript_expression":
-            if self._is_uploaded_tmp_name_access(node):
-                return ValueState()
+            upload_state = self._eval_upload_file_access(node)
+            if upload_state is not None:
+                return upload_state
             access_key = self._access_key(node)
             if access_key and self._is_validated_expression(access_key):
                 return ValueState()
             if access_key and access_key in self.variables:
                 return self.variables[access_key]
+            server_state = self._eval_server_access(node)
+            if server_state is not None:
+                return server_state
             if self._is_files_entry_access(node):
                 return ValueState(tainted=True, upload_file_entry=True, sources=[self._text(node)])
             if self._is_superglobal_access(node):
@@ -271,6 +300,41 @@ class TaintAnalyzer:
             state = state.merge(self._process_node(child))
         return state
 
+    def _process_switch_statement(self, node: Node) -> ValueState:
+        state = ValueState()
+        condition = next((child for child in node.children if child.is_named and child.type == "parenthesized_expression"), None)
+        if condition:
+            state = state.merge(self._eval_expr(condition))
+        base_variables = dict(self.variables)
+        branch_variables: dict[str, ValueState] = {}
+        for child in node.children:
+            if not child.is_named or child is condition:
+                continue
+            if child.type == "switch_block":
+                for case_child in child.children:
+                    if not case_child.is_named:
+                        continue
+                    self.variables = dict(base_variables)
+                    state = state.merge(self._process_node(case_child))
+                    for key, value in self.variables.items():
+                        branch_variables[key] = branch_variables.get(key, ValueState()).merge(value)
+                continue
+            state = state.merge(self._process_node(child))
+        self.variables = dict(base_variables)
+        for key, value in branch_variables.items():
+            self.variables[key] = self.variables.get(key, ValueState()).merge(value)
+        return state
+
+    def _process_case_statement(self, node: Node) -> ValueState:
+        state = ValueState()
+        for child in node.children:
+            if not child.is_named:
+                continue
+            if child.type in {"string", "integer", "float", "name"}:
+                continue
+            state = state.merge(self._process_node(child))
+        return state
+
     def _eval_function_call(self, node: Node) -> ValueState:
         function_node = self._child_by_field(node, "function")
         arguments = self._arguments(node)
@@ -279,6 +343,17 @@ class TaintAnalyzer:
 
         if function_name:
             lowered = function_name.lower()
+            if lowered == "file_get_contents" and self._has_php_input_argument(arguments):
+                return ValueState(tainted=True, sources=["php://input"], transforms=[self._text(node)])
+            if lowered == "move_uploaded_file":
+                self._check_upload_sink(node, arguments)
+                return ValueState()
+            if lowered in self.file_read_sinks:
+                self._check_file_sink(node, lowered, argument_state)
+                return ValueState()
+            if lowered in self.sql_sinks:
+                self._check_sql_sink(node, lowered, argument_state, arguments)
+                return ValueState()
             self._check_named_sink(node, lowered, arguments, argument_state)
             if lowered in self.callback_sinks:
                 self._check_callback_sink(node, lowered, arguments)
@@ -308,6 +383,21 @@ class TaintAnalyzer:
         if function_node and function_node.type == "variable_name":
             callable_name = self._text(function_node)
             callable_state = self.variables.get(callable_name, ValueState())
+            if callable_state.tainted:
+                state = callable_state.merge(argument_state)
+                detail = f"动态函数名 {callable_name} 来自 {', '.join(callable_state.sources) or '用户输入'}"
+                if argument_state.tainted:
+                    detail += f"，参数来自 {', '.join(argument_state.sources) or '用户输入'}"
+                self._add_result(
+                    node,
+                    "PHP_DYNAMIC_FUNCTION_NAME_TAINT",
+                    "用户输入控制动态函数名",
+                    "Critical",
+                    detail,
+                    state,
+                    self._text(node),
+                )
+                return ValueState()
             if callable_state.suspicious_callable and argument_state.tainted:
                 self._add_result(
                     node,
@@ -338,7 +428,7 @@ class TaintAnalyzer:
                     argument_state,
                     self._text(node),
                 )
-            return callable_state.merge(argument_state)
+            return ValueState()
 
         return argument_state
 
@@ -451,22 +541,6 @@ class TaintAnalyzer:
         for item in (variable, self._text(right)):
             if item not in state.transforms:
                 state.transforms.append(item)
-        escaped = any(transform in self.sql_escapers for transform in state.transforms)
-        if self._is_strong_sql_escaped(state):
-            return
-        source = ", ".join(state.sources) or "动态变量"
-        description = f"变量 {variable} 被赋值为包含 {source} 的动态 SQL 模板"
-        if escaped:
-            description += "；检测到转义函数处理，但 addslashes/mysql_real_escape_string 不能替代参数化查询，GBK 等编码场景仍可能绕过"
-        self._add_result(
-            node,
-            "PHP_SQL_INJECTION_TAINT",
-            "动态 SQL 模板包含用户输入",
-            "High",
-            description,
-            state,
-            self._text(node),
-        )
 
     def _check_sql_sink(self, node: Node, name: str, argument_state: ValueState, arguments: list[Node]) -> None:
         if self._is_parameterized_query(arguments):
@@ -505,6 +579,21 @@ class TaintAnalyzer:
         callback_state = self._eval_expr(arguments[0])
         rest_state = self._merge_states(self._eval_expr(argument) for argument in arguments[1:])
         dangerous = bool(callback and callback.lower() in self.dangerous_callable_names)
+        if callback_state.tainted:
+            state = callback_state.merge(rest_state)
+            detail = f"{name} 的回调函数名来自 {', '.join(callback_state.sources) or '用户输入'}"
+            if rest_state.tainted:
+                detail += f"，回调参数来自 {', '.join(rest_state.sources) or '用户输入'}"
+            self._add_result(
+                node,
+                "PHP_DYNAMIC_CALLBACK_NAME_TAINT",
+                "用户输入控制动态回调",
+                "Critical",
+                detail,
+                state,
+                self._text(node),
+            )
+            return
         if dangerous and name == "ob_start":
             self._add_result(
                 node,
@@ -536,6 +625,52 @@ class TaintAnalyzer:
                 callback_state.merge(rest_state),
                 self._text(node),
             )
+
+    def _check_session_assignment(self, node: Node, access_key: str, state: ValueState) -> None:
+        if not access_key.startswith("$_SESSION[") or not state.tainted:
+            return
+        self._add_result(
+            node,
+            "PHP_SESSION_TAINT_WRITE",
+            "用户输入写入 Session",
+            "High",
+            f"用户输入写入 {access_key}，如果存在 session 文件包含链路，可能造成本地文件包含利用",
+            state,
+            self._text(node),
+        )
+
+    def _eval_output_statement(self, node: Node, name: str) -> ValueState:
+        state = self._merge_states(self._eval_expr(child) for child in node.named_children)
+        if state.tainted and not state.upload_file_entry:
+            self._add_result(
+                node,
+                "PHP_OUTPUT_TAINT",
+                "用户输入输出到响应",
+                "High",
+                f"{name} 输出内容来自 {', '.join(state.sources) or '用户输入'}，需要确认是否经过适合当前上下文的编码",
+                state,
+                self._text(node),
+            )
+        return state
+
+    def _has_php_input_argument(self, arguments: list[Node]) -> bool:
+        return any((self._literal_string(argument) or "").lower() == "php://input" for argument in arguments)
+
+    def _check_upload_sink(self, node: Node, arguments: list[Node]) -> None:
+        if len(arguments) < 2:
+            return
+        destination_state = self._eval_expr(arguments[1])
+        if not destination_state.tainted:
+            return
+        self._add_result(
+            node,
+            "PHP_UPLOAD_TAINTED_DESTINATION",
+            "上传文件保存路径可控",
+            "High",
+            f"move_uploaded_file 的保存路径包含 {', '.join(destination_state.sources) or '用户输入'}，需要确认扩展名、文件名和目录不可被绕过",
+            destination_state,
+            self._text(node),
+        )
 
     def _decode_state(self, name: str, arguments: list[Node], argument_state: ValueState) -> ValueState:
         decoded = [value for argument in arguments for value in self._decoded_literals(name, argument)]
@@ -656,9 +791,44 @@ class TaintAnalyzer:
         base = self._subscript_base(node)
         return bool(base and base.type == "variable_name" and self._text(base) == "$_FILES" and self._subscript_key(node) != "tmp_name")
 
+    def _eval_upload_file_access(self, node: Node) -> ValueState | None:
+        if node.type != "subscript_expression":
+            return None
+        key = self._subscript_key(node)
+        base = self._subscript_base(node)
+        if not base:
+            return None
+
+        if base.type == "variable_name" and self._text(base) == "$_FILES":
+            return ValueState(upload_file_entry=True, sources=[self._text(node)])
+
+        if base.type == "subscript_expression":
+            base_state = self._eval_upload_file_access(base)
+        elif base.type == "variable_name":
+            base_state = self.variables.get(self._text(base), ValueState())
+        else:
+            base_state = ValueState()
+
+        if not base_state.upload_file_entry:
+            return None
+        if key in {"tmp_name", "size", "error"}:
+            return ValueState()
+        if key in {"name", "type", "full_path"}:
+            return ValueState(tainted=True, upload_file_entry=True, sources=[self._text(node)])
+        return ValueState(tainted=True, upload_file_entry=True, sources=[self._text(node)])
+
     def _is_superglobal_access(self, node: Node) -> bool:
         base = self._subscript_base(node)
         return bool(base and base.type == "variable_name" and self._text(base) in self.superglobals)
+
+    def _eval_server_access(self, node: Node) -> ValueState | None:
+        base = self._subscript_base(node)
+        if not (base and base.type == "variable_name" and self._text(base) == "$_SERVER"):
+            return None
+        key = self._subscript_key(node)
+        if key in self.client_server_keys or (key and key.startswith("HTTP_")):
+            return ValueState(tainted=True, sources=[self._text(node)])
+        return ValueState()
 
     def _subscript_base(self, node: Node) -> Node | None:
         return next((child for child in node.children if child.is_named and child.type != "string"), None)

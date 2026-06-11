@@ -34,7 +34,7 @@
       "id": "PHP003",
       "name": "命令执行函数(exec/shell_exec等)",
       "type": "REGEX",
-      "pattern": "\\b(exec|shell_exec|passthru|proc_open|popen)\\s*\\(\\s*(\\$|[\\\"'][^\\\"']*(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash))",
+      "pattern": "(?<!->)(?<!::)\\b(exec|shell_exec|passthru|proc_open|popen)\\s*\\(\\s*(\\$|[\\\"'][^\\\"']*(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash))",
       "severity": "High",
       "description": "检测到命令执行函数调用，参数为变量或包含可疑命令特征，可能导致命令执行",
       "enabled": true,
@@ -48,7 +48,7 @@
       "id": "PHP004",
       "name": "系统命令函数(system)",
       "type": "REGEX",
-      "pattern": "\\bsystem\\s*\\(\\s*(\\$|[\\\"'][^\\\"']*(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash))",
+      "pattern": "(?<!->)(?<!::)\\bsystem\\s*\\(\\s*(\\$|[\\\"'][^\\\"']*(wget|curl|nc|ncat|netcat|bash|sh|php|python|perl|ruby|powershell|cmd|certutil|base64_decode|hex2bin|gzuncompress|gzinflate|str_rot13|/bin/sh|/bin/bash))",
       "severity": "High",
       "description": "检测到system函数调用，参数为变量或包含可疑命令特征，可能导致命令执行",
       "enabled": true,
@@ -153,6 +153,231 @@
       "flags": [],
       "skipContexts": [
         "string",
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_XSS_DOM_INNERHTML",
+      "name": "DOM XSS(innerHTML/document.write)",
+      "type": "REGEX",
+      "pattern": "\\b(?:innerHTML|outerHTML)\\s*=\\s*(?!.*\\bescHtml\\s*\\()[^;\\n]*(?:location\\.hash|decodeURIComponent|\\.value|\\binput\\b|\\bhash\\b)|\\bdocument\\.write\\s*\\([^)]*(?:\\$_(?:GET|POST|REQUEST|COOKIE)|location\\.hash|\\.value|\\binput\\b)",
+      "severity": "High",
+      "description": "检测到 DOM/反射输出直接写入 innerHTML、outerHTML 或 document.write，可能存在 XSS",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [],
+      "scanFullFile": true
+    },
+    {
+      "id": "PHP_XSS_UNESCAPED_ECHO",
+      "name": "未转义输出用户内容",
+      "type": "REGEX",
+      "pattern": "<\\?=\\s*(?!htmlspecialchars\\s*\\(|htmlentities\\s*\\()\\s*(?:\\$_(?:GET|POST|REQUEST|COOKIE)(?:\\[[^\\]]+\\])?|\\$\\w+\\[['\\\"]content['\\\"]\\]|\\$\\w+->content)\\s*\\?>|\\b(?:echo|print)\\s+(?!htmlspecialchars\\s*\\(|htmlentities\\s*\\()\\s*(?:\\$_(?:GET|POST|REQUEST|COOKIE)(?:\\[[^\\]]+\\])?|\\$\\w+\\[['\\\"]content['\\\"]\\]|\\$\\w+->content)\\b",
+      "severity": "High",
+      "description": "检测到用户内容或消息字段未经过 HTML 转义直接输出，可能存在反射型/存储型 XSS",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [],
+      "scanFullFile": true
+    },
+    {
+      "id": "PHP_UPLOAD_TRUST_CLIENT_MIME",
+      "name": "文件上传信任客户端 MIME",
+      "type": "REGEX",
+      "pattern": "\\$\\w*(?:mime|type)\\w*\\s*=\\s*\\$\\w+\\[['\\\"]type['\\\"]\\]|\\$_FILES\\s*\\[[^\\]]+\\]\\s*\\[['\\\"]type['\\\"]|\\bin_array\\s*\\(\\s*\\$\\w*(?:mime|type)\\w*\\s*,\\s*\\$\\w*allow\\w*Mime",
+      "severity": "High",
+      "description": "检测到上传校验使用客户端提供的 MIME 类型，攻击者可伪造 Content-Type 绕过",
+      "enabled": true,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_UPLOAD_WEAK_EXTENSION_FILTER",
+      "name": "文件上传弱后缀过滤",
+      "type": "REGEX",
+      "pattern": "pathinfo\\s*\\(\\s*\\$\\w*(?:name|file|path)\\w*[^;\\n]*PATHINFO_EXTENSION\\)|\\bexplode\\s*\\(\\s*['\\\"]\\.['\\\"]\\s*,\\s*\\$\\w*(?:name|file|path)\\w*\\s*\\)|\\b(?:deny|blacklist)\\w*\\s*=\\s*\\[[^\\]]*(?:php|phtml|php3|php4|php5)",
+      "severity": "High",
+      "description": "检测到上传流程使用后缀黑名单或末尾后缀判断，可能被大小写、双后缀、解析差异或截断绕过",
+      "enabled": true,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "string",
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_UPLOAD_WEAK_CONTENT_CHECK",
+      "name": "文件上传弱内容检测",
+      "type": "REGEX",
+      "pattern": "file_get_contents\\s*\\(\\s*\\$\\w+\\s*\\)[\\s\\S]{0,240}\\bpreg_match\\s*\\(\\s*['\\\"]/\\^.*(?:GIF89a|GIF87a|PNG|<\\\\\\?php)",
+      "severity": "High",
+      "description": "检测到上传流程只检查文件头或 PHP 起始标签，可能被短标签、图片马或多态内容绕过",
+      "enabled": true,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_UPLOAD_HTACCESS_ALLOWED",
+      "name": "允许上传 .htaccess",
+      "type": "REGEX",
+      "pattern": "\\$\\w+\\s*={0,2}\\s*['\\\"]\\.htaccess['\\\"]|\\.htaccess",
+      "severity": "High",
+      "description": "检测到上传流程允许 .htaccess，可能改变目录解析规则导致图片马或脚本执行",
+      "enabled": true,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_JWT_NONE_ALG",
+      "name": "JWT None 算法绕过",
+      "type": "REGEX",
+      "pattern": "\\$\\w*(?:alg|algorithm)\\w*\\s*={2,3}\\s*['\\\"]NONE['\\\"]|\\$\\w*header\\w*\\s*\\[[^\\]]*['\\\"]alg['\\\"][^\\]]*\\][\\s\\S]{0,220}['\\\"]NONE['\\\"]",
+      "severity": "Critical",
+      "description": "检测到 JWT 算法来自 token 且存在 NONE/none 分支，可能允许无签名令牌绕过",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_JWT_WEAK_SECRET",
+      "name": "JWT 弱密钥/硬编码密钥",
+      "type": "REGEX",
+      "pattern": "hash_hmac\\s*\\([^;\\n]*['\\\"](?:secret|123456|password|admin|test|hacklab\\w*)['\\\"]|\\$\\w*(?:jwt|secret|sign|hmac|key)\\w*\\s*=\\s*['\\\"](?:secret|123456|password|admin|test|hacklab\\w*)['\\\"]",
+      "severity": "High",
+      "description": "检测到 JWT/HMAC/签名相关变量或 hash_hmac 使用硬编码弱密钥，可能被爆破后伪造 token 或签名",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_JWT_ALG_CONFUSION",
+      "name": "JWT 算法混淆风险",
+      "type": "REGEX",
+      "pattern": "\\$alg\\s*={2,3}\\s*['\\\"]HS256['\\\"][\\s\\S]{0,500}\\$\\w*(?:pub|public)\\w*Key|hash_hmac\\s*\\([^;\\n]*\\$\\w*(?:pub|public)\\w*Key|\\$\\w*(?:pub|public)\\w*Key[\\s\\S]{0,500}\\$alg\\s*={2,3}\\s*['\\\"]HS256['\\\"]",
+      "severity": "Critical",
+      "description": "检测到 JWT HS256 校验流程使用公钥或 public key 相关变量，可能存在 RS256/HS256 算法混淆绕过",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_JWT_SENSITIVE_PAYLOAD",
+      "name": "JWT Payload 敏感信息泄露",
+      "type": "REGEX",
+      "pattern": "\\$\\w*payload\\w*\\s*=\\s*\\[[\\s\\S]{0,1000}(?:['\\\"](?:flag|internal_note|secret|password|token|private|credential)['\\\"]\\s*=>)",
+      "severity": "Medium",
+      "description": "检测到 JWT payload 中写入敏感字段，客户端可解码读取造成信息泄露",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_SMS_DEBUG_CODE_LEAK",
+      "name": "验证码/短信调试码泄露",
+      "type": "REGEX",
+      "pattern": "['\\\"](?:debug_code|verify_code|sms_code|captcha_code|otp)['\\\"]\\s*=>\\s*(?!['\\\"]{2}|null|false)(?:\\$\\w+|\\$\\w+\\[[^\\]]+\\]|\\w+\\(|\\[[^\\]]+\\])|['\\\"]code['\\\"]\\s*=>\\s*\\$\\w*(?:code|otp|captcha)\\w*",
+      "severity": "High",
+      "description": "检测到接口响应中回显验证码、调试码或 OTP，可能绕过短信/验证码验证",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_RATE_LIMIT_HEADER_BYPASS",
+      "name": "基于可伪造请求头的限速",
+      "type": "REGEX",
+      "pattern": "\\$_SERVER\\s*\\[['\\\"]HTTP_(?:X_FORWARDED_FOR|X_REAL_IP|CLIENT_IP)['\\\"]\\][\\s\\S]{0,500}(?:ratelimit|limit|count|maxReq|md5\\s*\\(\\s*\\$ip)",
+      "severity": "Medium",
+      "description": "检测到限速逻辑信任 X-Forwarded-For/X-Real-IP 等可伪造请求头，可能被爆破绕过",
+      "enabled": true,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_BUSINESS_TRUST_CLIENT_PRICE",
+      "name": "业务逻辑信任客户端价格/数量",
+      "type": "REGEX",
+      "pattern": "\\$_POST\\s*\\[['\\\"](?:total_price|price|amount|quantity|qty)['\\\"]\\][\\s\\S]{0,500}(?:bal|balance|total|paid|setBal|checkout)|(?:total|amount|paid)\\s*[+\\-*/]?=\\s*[^;\\n]*(?:\\$qty|\\$tp|\\$_POST)",
+      "severity": "High",
+      "description": "检测到结算逻辑信任客户端价格或数量参数，可能存在改价、负数购买或整数溢出",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_IDOR_DIRECT_OBJECT_ID",
+      "name": "直接对象引用/越权访问",
+      "type": "REGEX",
+      "pattern": "\\$_(?:GET|POST|REQUEST)\\s*\\[['\\\"](?:order_id|address_id|user_id|uid|coupon_id|id)['\\\"]\\][\\s\\S]{0,700}(?:flag|admin|buyer|address|coupon|detail|UPDATE|DELETE|SELECT)",
+      "severity": "High",
+      "description": "检测到接口直接使用请求中的对象 ID 读取或修改敏感对象，需确认是否缺少归属/权限校验",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
+        "comment"
+      ]
+    },
+    {
+      "id": "PHP_SENSITIVE_RESPONSE_LEAK",
+      "name": "接口响应敏感字段泄露",
+      "type": "REGEX",
+      "pattern": "['\\\"](?:flag|secret|token|api_key|password|credential)['\\\"]\\s*=>\\s*(?!['\\\"]{2}|null|false)(?:\\$\\w+|\\$\\w+\\[[^\\]]+\\]|\\$this->\\w+\\([^)]*\\)|\\w+\\([^)]*\\))",
+      "severity": "High",
+      "description": "检测到接口响应中返回 flag、secret、token、api_key、password 等敏感字段，可能造成敏感信息泄露",
+      "enabled": false,
+      "flags": [
+        "IGNORECASE"
+      ],
+      "skipContexts": [
         "comment"
       ]
     }

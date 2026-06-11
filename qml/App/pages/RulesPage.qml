@@ -52,7 +52,7 @@ PageFrame {
                 dense: true
                 model: ["php", "python", "java"]
                 currentText: ruleLanguage
-                onActivated: ruleLanguage = text
+                onActivated: function(text) { ruleLanguage = text }
             }
 
             MD.ComboBox {
@@ -60,7 +60,7 @@ PageFrame {
                 dense: true
                 model: ["Critical", "High", "Medium", "Low"]
                 currentText: ruleSeverity
-                onActivated: ruleSeverity = text
+                onActivated: function(text) { ruleSeverity = text }
             }
 
             MD.TextField {
@@ -163,7 +163,7 @@ PageFrame {
                     dense: true
                     model: ["all", "php", "python", "java"]
                     currentText: languageFilter
-                    onActivated: languageFilter = text
+                    onActivated: function(text) { languageFilter = text }
                 }
 
                 MD.Button {
